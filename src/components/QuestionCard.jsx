@@ -1,0 +1,259 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Clock, CheckCircle2, XCircle, Eye } from 'lucide-react'
+import { CATEGORIES } from '../data/questions'
+import { useCheat } from '../hooks/useCheat'
+
+const TIMER_DURATION = 15
+
+export default function QuestionCard({ gameState, playerName, onSubmitAnswer, onTimeout }) {
+  const cheatActive = useCheat()
+  const [selectedAnswer, setSelectedAnswer] = useState(null)
+  const [timeLeft, setTimeLeft] = useState(TIMER_DURATION)
+  const [hasAnswered, setHasAnswered] = useState(false)
+  const [showResult, setShowResult] = useState(false)
+  const timerRef = useRef(null)
+  const hasTimedOutRef = useRef(false)
+  const questionIdRef = useRef(null)
+
+  const question = gameState?.currentQuestion
+  const isMyTurn = gameState?.currentTurn === playerName
+  const category = gameState?.currentCategory
+    ? CATEGORIES.find(c => c.id === gameState.currentCategory)
+    : null
+
+  // Reset state when question changes
+  useEffect(() => {
+    if (!question || question.id === questionIdRef.current) return
+    questionIdRef.current = question.id
+    setSelectedAnswer(null)
+    setTimeLeft(TIMER_DURATION)
+    setHasAnswered(false)
+    setShowResult(false)
+    hasTimedOutRef.current = false
+  }, [question?.id])
+
+  // Timer
+  useEffect(() => {
+    if (!question || hasAnswered || !isMyTurn) return
+    if (hasTimedOutRef.current) return
+
+    timerRef.current = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current)
+          if (!hasTimedOutRef.current) {
+            hasTimedOutRef.current = true
+            onTimeout && onTimeout()
+          }
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timerRef.current)
+  }, [question?.id, hasAnswered, isMyTurn])
+
+  const handleSelectAnswer = useCallback(async (optionIndex) => {
+    if (!isMyTurn || hasAnswered || selectedAnswer !== null) return
+    clearInterval(timerRef.current)
+    setSelectedAnswer(optionIndex)
+    setHasAnswered(true)
+    setShowResult(true)
+
+    // Show result briefly then submit
+    setTimeout(() => {
+      onSubmitAnswer && onSubmitAnswer(optionIndex)
+    }, 1500)
+  }, [isMyTurn, hasAnswered, selectedAnswer, onSubmitAnswer])
+
+  if (!question || !category) return null
+
+  const isCorrect = selectedAnswer !== null && selectedAnswer === question.correct
+  const isWrong = selectedAnswer !== null && selectedAnswer !== question.correct
+
+  const getOptionStyle = (index) => {
+    const isSelected = selectedAnswer === index
+    const isCorrectOption = index === question.correct
+    const cheatHighlight = cheatActive && isCorrectOption && !hasAnswered
+
+    if (cheatHighlight) {
+      return 'bg-white/10 border-white shadow-[0_0_15px_rgba(255,255,255,0.9)] ring-2 ring-white'
+    }
+
+    if (!showResult) {
+      return isSelected
+        ? 'bg-purple-600/50 border-purple-400 scale-[0.98]'
+        : 'bg-white/8 border-white/15 hover:bg-white/15 hover:border-white/30 active:scale-[0.98]'
+    }
+
+    if (isCorrectOption) {
+      return 'bg-green-500/30 border-green-400 shadow-[0_0_15px_rgba(34,197,94,0.4)]'
+    }
+    if (isSelected && !isCorrectOption) {
+      return 'bg-red-500/30 border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
+    }
+    return 'bg-white/5 border-white/10 opacity-50'
+  }
+
+  const getOptionIcon = (index) => {
+    if (!showResult) return null
+    if (index === question.correct) return <CheckCircle2 size={18} className="text-green-400 flex-shrink-0" />
+    if (index === selectedAnswer && index !== question.correct) return <XCircle size={18} className="text-red-400 flex-shrink-0" />
+    return null
+  }
+
+  const timerColor = timeLeft <= 5 ? '#ef4444' : timeLeft <= 10 ? '#f97316' : '#7c3aed'
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 30 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -30 }}
+      className="w-full max-w-sm mx-auto px-3"
+    >
+      {/* Category badge */}
+      <div className="flex items-center justify-between mb-3">
+        <div
+          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold"
+          style={{ backgroundColor: category.color + '33', color: category.color }}
+        >
+          <span>{category.emoji}</span>
+          <span>{category.label}</span>
+        </div>
+        {isMyTurn && (
+          <div className="flex items-center gap-1.5">
+            <Clock size={14} className={timeLeft <= 5 ? 'text-red-400' : 'text-white/50'} />
+            <motion.span
+              key={timeLeft}
+              initial={{ scale: 1.3 }}
+              animate={{ scale: 1 }}
+              className={`font-mono font-black text-lg ${timeLeft <= 5 ? 'text-red-400' : 'text-white/70'}`}
+            >
+              {timeLeft}
+            </motion.span>
+          </div>
+        )}
+      </div>
+
+      {/* Timer bar */}
+      {isMyTurn && (
+        <div className="mb-4 h-1.5 bg-white/10 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ backgroundColor: timerColor, transition: 'background-color 0.5s ease' }}
+            animate={{ width: `${(timeLeft / TIMER_DURATION) * 100}%` }}
+            transition={{ duration: 1, ease: 'linear' }}
+          />
+        </div>
+      )}
+
+      {/* Question card */}
+      <motion.div
+        className="glass rounded-2xl p-5 mb-4 shadow-xl"
+        style={{ borderColor: category.color + '44', borderWidth: 1 }}
+      >
+        <p className="text-white font-semibold text-base leading-relaxed text-center">
+          {question.question}
+        </p>
+
+        {/* Cheat mode indicator */}
+        {cheatActive && !hasAnswered && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center justify-center gap-1 mt-3 text-white/30 text-xs"
+          >
+            <Eye size={12} />
+            <span>Modalità aiuto attiva</span>
+          </motion.div>
+        )}
+      </motion.div>
+
+      {/* Observer banner */}
+      {!isMyTurn && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+          className="mb-3 text-center"
+        >
+          <span className="text-white/40 text-xs bg-white/5 px-3 py-1.5 rounded-full">
+            👀 Stai guardando la risposta di <strong className="text-purple-300">{gameState.currentTurn}</strong>
+          </span>
+        </motion.div>
+      )}
+
+      {/* Answer options - 2x2 grid */}
+      <div className="grid grid-cols-2 gap-3">
+        {question.options.map((option, index) => (
+          <motion.button
+            key={`${question.id}-${index}`}
+            onClick={() => handleSelectAnswer(index)}
+            disabled={!isMyTurn || hasAnswered}
+            whileTap={isMyTurn && !hasAnswered ? { scale: 0.96 } : {}}
+            className={`
+              relative p-3 rounded-xl border text-left transition-all
+              min-h-[70px] flex flex-col justify-between
+              text-white text-sm font-medium leading-snug
+              ${getOptionStyle(index)}
+              ${isMyTurn && !hasAnswered ? 'cursor-pointer' : 'cursor-default'}
+            `}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <span className="flex-1">{option}</span>
+              {getOptionIcon(index)}
+            </div>
+            <div
+              className="text-xs font-bold opacity-40 mt-1"
+              style={{ color: category.color }}
+            >
+              {String.fromCharCode(65 + index)}
+            </div>
+
+            {/* Correct answer flash overlay */}
+            <AnimatePresence>
+              {showResult && index === question.correct && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0, 0.3, 0] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.6, repeat: 2 }}
+                  className="absolute inset-0 rounded-xl bg-green-400 pointer-events-none"
+                />
+              )}
+              {showResult && index === selectedAnswer && index !== question.correct && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0, 0.3, 0] }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.6, repeat: 2 }}
+                  className="absolute inset-0 rounded-xl bg-red-400 pointer-events-none"
+                />
+              )}
+            </AnimatePresence>
+          </motion.button>
+        ))}
+      </div>
+
+      {/* Result message */}
+      <AnimatePresence>
+        {showResult && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className={`mt-4 p-3 rounded-xl text-center font-bold text-sm ${
+              isCorrect
+                ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                : 'bg-red-500/20 text-red-400 border border-red-500/30'
+            }`}
+          >
+            {isCorrect ? '✅ Risposta corretta! +1 punto' : `❌ Risposta sbagliata! La corretta era: "${question.options[question.correct]}"`}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
