@@ -96,13 +96,11 @@ export default function Wheel({ onSpinComplete, isMyTurn, initialAngle = 0 }) {
         className="relative"
         style={{ width: SIZE, height: SIZE }}
       >
-        {/* Outer glow ring */}
+        {/* Outer glow ring — pointer-events-none so it never intercepts clicks */}
         <div
-          className="absolute inset-0 rounded-full"
+          className="absolute inset-0 rounded-full pointer-events-none"
           style={{
-            background: 'transparent',
             boxShadow: '0 0 40px rgba(139, 92, 246, 0.4), 0 0 80px rgba(139, 92, 246, 0.15)',
-            borderRadius: '50%',
           }}
         />
 
@@ -245,6 +243,17 @@ export default function Wheel({ onSpinComplete, isMyTurn, initialAngle = 0 }) {
             className="absolute inset-0 rounded-full border-2 border-yellow-400/50 pointer-events-none"
             animate={{ opacity: [0.5, 1, 0.5], scale: [1, 1.02, 1] }}
             transition={{ duration: 1.5, repeat: Infinity }}
+          />
+        )}
+
+        {/* Transparent circular click overlay — the single, reliable click target.
+            Sits on top of everything, covers the entire wheel. Only active when
+            it's the player's turn and the wheel is not spinning. */}
+        {isMyTurn && !isSpinning && (
+          <div
+            className="absolute inset-0 rounded-full z-20"
+            style={{ cursor: 'pointer', background: 'transparent' }}
+            onClick={spin}
           />
         )}
       </div>

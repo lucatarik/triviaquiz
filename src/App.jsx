@@ -66,9 +66,14 @@ export default function App() {
     }
   }, [ready, roomId, playerName])
 
-  // Lock wheel for 2.5 s after each answer so both players see the result clearly
+  // Lock wheel for 2.5 s after each answer so both players see the result clearly.
+  // IMPORTANT: must explicitly reset to false when answerResult becomes null (restart/new game)
+  // otherwise the cleanup cancels the timeout without ever calling setWheelLocked(false).
   useEffect(() => {
-    if (!gameState?.answerResult?.timestamp) return
+    if (!gameState?.answerResult?.timestamp) {
+      setWheelLocked(false)
+      return
+    }
     setWheelLocked(true)
     const t = setTimeout(() => setWheelLocked(false), 2500)
     return () => clearTimeout(t)

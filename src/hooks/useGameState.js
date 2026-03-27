@@ -25,7 +25,7 @@ export function useGameState(roomId, playerName) {
         state = createInitialGameState(roomId, playerName)
         await setGameState(roomId, state)
       } else if (!state.players[playerName]) {
-        // Second player joining
+        // Second player joining — reset leftover result state so wheelLocked doesn't fire
         state = {
           ...state,
           players: {
@@ -33,6 +33,8 @@ export function useGameState(roomId, playerName) {
             [playerName]: { score: 0, connected: true, joinedAt: Date.now() }
           },
           phase: Object.keys(state.players).length === 1 ? 'spinning' : state.phase,
+          answerResult: null,
+          pendingAnswer: null,
         }
         await setGameState(roomId, state)
       } else {
