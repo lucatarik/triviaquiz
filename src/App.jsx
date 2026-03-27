@@ -5,6 +5,7 @@ import WaitingRoom from './components/WaitingRoom'
 import Navbar from './components/Navbar'
 import Wheel from './components/Wheel'
 import CategoryModal from './components/CategoryModal'
+import JollyPicker from './components/JollyPicker'
 import QuestionCard from './components/QuestionCard'
 import ScoreBoard from './components/ScoreBoard'
 import { useGameState } from './hooks/useGameState'
@@ -51,6 +52,7 @@ export default function App() {
     initializeGame,
     spinWheel,
     confirmCategory,
+    selectJollyCategory,
     reportPendingAnswer,
     submitAnswer,
     timeoutAnswer,
@@ -292,6 +294,13 @@ export default function App() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Jolly picker (overlay) — shown when wheel lands on ⭐ */}
+      <JollyPicker
+        gameState={gameState}
+        playerName={playerName}
+        onSelectCategory={selectJollyCategory}
+      />
 
       {/* Category Modal (overlay) */}
       <CategoryModal

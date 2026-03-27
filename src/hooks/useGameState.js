@@ -71,12 +71,15 @@ export function useGameState(roomId, playerName) {
         selectedCategory = CATEGORIES[categoryIndex]
       }
 
+      // Jolly → let the active player choose the category
+      const nextPhase = selectedCategory.isJolly ? 'jolly_pick' : 'category_confirm'
+
       const updated = {
         ...gameState,
-        phase: 'category_confirm',
+        phase: nextPhase,
         wheelAngle: targetAngle,
-        currentCategory: selectedCategory.id,
-        pendingCategory: selectedCategory,
+        currentCategory: selectedCategory.isJolly ? null : selectedCategory.id,
+        pendingCategory: selectedCategory.isJolly ? null : selectedCategory,
       }
       await setGameState(roomId, updated)
       setLocalGameState(updated)
@@ -103,6 +106,29 @@ export function useGameState(roomId, playerName) {
         currentQuestion: question,
         questionStartTime: Date.now(),
         answerResult: null,
+      }
+      await setGameState(roomId, updated)
+      setLocalGameState(updated)
+    } finally {
+      isActingRef.current = false
+    }
+  }, [gameState, playerName, roomId])
+
+  const selectJollyCategory = useCallback(async (categoryId) => {
+    if (!gameState || isActingRef.current) return
+    if (gameState.currentTurn !== playerName) return
+    if (gameState.phase !== 'jolly_pick') return
+    isActingRef.current = true
+
+    try {
+      const category = CATEGORIES.find(c => c.id === categoryId)
+      if (!category || category.isJolly) return
+
+      const updated = {
+        ...gameState,
+        phase: 'category_confirm',
+        currentCategory: category.id,
+        pendingCategory: category,
       }
       await setGameState(roomId, updated)
       setLocalGameState(updated)
@@ -267,6 +293,7 @@ export function useGameState(roomId, playerName) {
     initializeGame,
     spinWheel,
     confirmCategory,
+    selectJollyCategory,
     reportPendingAnswer,
     submitAnswer,
     timeoutAnswer,

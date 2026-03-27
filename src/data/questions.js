@@ -8,7 +8,11 @@ export const CATEGORIES = [
   { id: 'tecnologia',      label: 'Tecnologia',      color: '#06B6D4', textColor: '#fff', emoji: '💻' },
   { id: 'news',            label: 'News',            color: '#8B5CF6', textColor: '#fff', emoji: '📰' },
   { id: 'geopolitica',     label: 'Geopolitica',     color: '#374151', textColor: '#fff', emoji: '🗺️' },
+  { id: 'jolly',           label: 'Jolly',           color: '#FFD700', textColor: '#1a0f35', emoji: '⭐', isJolly: true },
 ]
+
+// Only the real question categories (excludes jolly)
+export const QUESTION_CATEGORIES = CATEGORIES.filter(c => !c.isJolly)
 
 export const QUESTIONS = {
   storia: [
