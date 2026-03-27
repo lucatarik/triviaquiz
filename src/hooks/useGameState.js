@@ -187,9 +187,9 @@ export function useGameState(roomId, playerName) {
       const currentIndex = allPlayers.indexOf(playerName)
       const nextPlayer = allPlayers[(currentIndex + 1) % allPlayers.length]
 
-      // Check win condition (first to 15 points)
+      // Check win condition (first to 10 points)
       const newScore = players[playerName].score
-      const phase = newScore >= 15 ? 'ended' : 'spinning'
+      const phase = newScore >= 10 ? 'ended' : 'spinning'
 
       const updated = {
         ...gameState,
