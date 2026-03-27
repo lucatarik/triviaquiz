@@ -152,7 +152,11 @@ export function useGameState(roomId, playerName) {
     setLocalGameState(updated)
   }, [gameState, playerName, roomId])
 
-  const submitAnswer = useCallback(async (selectedIndex) => {
+  // clientSpeedBonus is passed from QuestionCard based on the local countdown timer
+  // (timeLeft > 10 means answered within the first 5 seconds as seen on screen).
+  // We do NOT use Date.now() - questionStartTime here because that timestamp is set
+  // in Redis and the polling delay (~1.5 s) would eat into the bonus window unfairly.
+  const submitAnswer = useCallback(async (selectedIndex, clientSpeedBonus = false) => {
     if (!gameState || isActingRef.current) return
     if (gameState.currentTurn !== playerName) return
     if (gameState.phase !== 'question') return
@@ -162,9 +166,7 @@ export function useGameState(roomId, playerName) {
       const question = gameState.currentQuestion
       const isCorrect = selectedIndex === question.correct
 
-      // Speed bonus: +2 if answered within 5 seconds, +1 otherwise
-      const elapsed = Date.now() - (gameState.questionStartTime || Date.now())
-      const speedBonus = isCorrect && elapsed < 5000
+      const speedBonus = isCorrect && clientSpeedBonus
       const pointsEarned = isCorrect ? (speedBonus ? 2 : 1) : 0
 
       const players = { ...gameState.players }

@@ -120,9 +120,9 @@ export default function App() {
     spinWheel(angle, selectedCategory)
   }, [spinWheel])
 
-  const handleSubmitAnswer = useCallback(async (index) => {
+  const handleSubmitAnswer = useCallback(async (index, speedBonus) => {
     setTimerActive(false)
-    await submitAnswer(index)
+    await submitAnswer(index, speedBonus)
   }, [submitAnswer])
 
   const handleTimeout = useCallback(async () => {

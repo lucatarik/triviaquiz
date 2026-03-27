@@ -77,9 +77,9 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
     // Immediately broadcast the selection so the opponent can see it
     onReportSelection && onReportSelection(optionIndex)
 
-    // Show result briefly then submit
+    // Show result briefly then submit — pass the local speed bonus flag
     setTimeout(() => {
-      onSubmitAnswer && onSubmitAnswer(optionIndex)
+      onSubmitAnswer && onSubmitAnswer(optionIndex, isSpeedBonus)
     }, 1500)
   }, [isMyTurn, hasAnswered, selectedAnswer, timeLeft, onSubmitAnswer, onReportSelection])
 
