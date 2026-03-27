@@ -255,29 +255,49 @@ export default function App() {
               />
 
               {/* Answer result from previous question */}
-              {gameState.answerResult && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`w-full max-w-sm px-3`}
-                >
-                  <div className={`rounded-xl p-3 text-center text-sm font-semibold border ${
-                    gameState.answerResult.isCorrect
-                      ? 'bg-green-500/15 border-green-500/30 text-green-400'
-                      : 'bg-red-500/15 border-red-500/30 text-red-400'
-                  }`}>
-                    {gameState.answerResult.timedOut ? (
-                      <span>⏰ Tempo scaduto per {gameState.answerResult.playerName}!</span>
-                    ) : gameState.answerResult.isCorrect ? (
-                      gameState.answerResult.speedBonus
-                        ? <span>⚡ {gameState.answerResult.playerName} ha risposto in meno di 5s! +2 punti!</span>
-                        : <span>✅ {gameState.answerResult.playerName} ha risposto correttamente! +1 punto</span>
+              {gameState.answerResult && (() => {
+                const r = gameState.answerResult
+                return (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="w-full max-w-sm px-3"
+                  >
+                    {r.timedOut ? (
+                      <div className="rounded-xl p-3 text-center text-sm font-semibold border bg-orange-500/15 border-orange-500/30 text-orange-400">
+                        ⏰ Tempo scaduto per <strong>{r.playerName}</strong>!
+                        {r.correctOption && (
+                          <div className="mt-1 text-xs text-white/50 font-normal">
+                            Risposta corretta: <span className="text-green-400 font-semibold">"{r.correctOption}"</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : r.isCorrect ? (
+                      <div className="rounded-xl p-3 text-center text-sm font-semibold border bg-green-500/15 border-green-500/30 text-green-400">
+                        {r.speedBonus ? '⚡' : '✅'} <strong>{r.playerName}</strong>
+                        {r.speedBonus ? ' risposta fulminea! +2 punti!' : ' risposta corretta! +1 punto'}
+                        <div className="mt-1 text-xs text-green-300/70 font-normal">
+                          "{r.correctOption}"
+                        </div>
+                      </div>
                     ) : (
-                      <span>❌ {gameState.answerResult.playerName} ha sbagliato la risposta!</span>
+                      <div className="rounded-xl p-3 text-sm font-semibold border bg-red-500/15 border-red-500/30 space-y-1">
+                        <div className="text-red-400 text-center">
+                          ❌ <strong>{r.playerName}</strong> ha sbagliato
+                        </div>
+                        <div className="flex items-start gap-2 text-xs font-normal mt-1">
+                          <span className="text-red-400/80 shrink-0">Scelta:</span>
+                          <span className="text-white/60 line-through">"{r.selectedOption}"</span>
+                        </div>
+                        <div className="flex items-start gap-2 text-xs font-normal">
+                          <span className="text-green-400 shrink-0">Corretta:</span>
+                          <span className="text-green-300 font-semibold">"{r.correctOption}"</span>
+                        </div>
+                      </div>
                     )}
-                  </div>
-                </motion.div>
-              )}
+                  </motion.div>
+                )
+              })()}
             </motion.div>
           )}
 
