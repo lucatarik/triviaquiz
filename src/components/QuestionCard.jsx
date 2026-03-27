@@ -6,7 +6,7 @@ import { useCheat } from '../hooks/useCheat'
 
 const TIMER_DURATION = 15
 
-export default function QuestionCard({ gameState, playerName, onSubmitAnswer, onTimeout }) {
+export default function QuestionCard({ gameState, playerName, onSubmitAnswer, onTimeout, onReportSelection }) {
   const cheatActive = useCheat()
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION)
@@ -21,6 +21,13 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
   const category = gameState?.currentCategory
     ? CATEGORIES.find(c => c.id === gameState.currentCategory)
     : null
+
+  // Opponent's pending selection (saved to Redis, polled every 1.5s)
+  const opponentPending = gameState?.pendingAnswer
+  const opponentSelectedIndex =
+    opponentPending && opponentPending.playerName !== playerName
+      ? opponentPending.optionIndex
+      : null
 
   // Reset state when question changes
   useEffect(() => {
@@ -62,11 +69,14 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
     setHasAnswered(true)
     setShowResult(true)
 
+    // Immediately broadcast the selection so the opponent can see it
+    onReportSelection && onReportSelection(optionIndex)
+
     // Show result briefly then submit
     setTimeout(() => {
       onSubmitAnswer && onSubmitAnswer(optionIndex)
     }, 1500)
-  }, [isMyTurn, hasAnswered, selectedAnswer, onSubmitAnswer])
+  }, [isMyTurn, hasAnswered, selectedAnswer, onSubmitAnswer, onReportSelection])
 
   if (!question || !category) return null
 
@@ -77,15 +87,17 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
     const isSelected = selectedAnswer === index
     const isCorrectOption = index === question.correct
     const cheatHighlight = cheatActive && isCorrectOption && !hasAnswered
+    const isOpponentPick = opponentSelectedIndex === index
 
     if (cheatHighlight) {
       return 'bg-white/10 border-white shadow-[0_0_15px_rgba(255,255,255,0.9)] ring-2 ring-white'
     }
 
     if (!showResult) {
-      return isSelected
-        ? 'bg-purple-600/50 border-purple-400 scale-[0.98]'
-        : 'bg-white/8 border-white/15 hover:bg-white/15 hover:border-white/30 active:scale-[0.98]'
+      if (isSelected) return 'bg-purple-600/50 border-purple-400 scale-[0.98]'
+      // Opponent has selected this option — shown only to the watcher
+      if (isOpponentPick) return 'bg-orange-500/20 border-orange-400 ring-2 ring-orange-400/60'
+      return 'bg-white/8 border-white/15 hover:bg-white/15 hover:border-white/30 active:scale-[0.98]'
     }
 
     if (isCorrectOption) {
@@ -204,6 +216,17 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
             <div className="flex items-start justify-between gap-2">
               <span className="flex-1">{option}</span>
               {getOptionIcon(index)}
+              {/* Opponent selection indicator — visible only to the watcher */}
+              {opponentSelectedIndex === index && !showResult && (
+                <motion.span
+                  animate={{ opacity: [0.6, 1, 0.6], scale: [1, 1.15, 1] }}
+                  transition={{ duration: 0.9, repeat: Infinity }}
+                  className="text-orange-400 text-xs font-black flex-shrink-0"
+                  title={`${gameState.currentTurn} ha scelto questa`}
+                >
+                  👆
+                </motion.span>
+              )}
             </div>
             <div
               className="text-xs font-bold opacity-40 mt-1"

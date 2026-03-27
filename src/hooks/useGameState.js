@@ -111,6 +111,19 @@ export function useGameState(roomId, playerName) {
     }
   }, [gameState, playerName, roomId])
 
+  // Saves the option the active player just tapped — visible to the opponent via polling.
+  // Intentionally NOT guarded by isActingRef (lightweight, fire-and-forget).
+  const reportPendingAnswer = useCallback(async (optionIndex) => {
+    if (!gameState || gameState.currentTurn !== playerName) return
+    if (gameState.phase !== 'question') return
+    const updated = {
+      ...gameState,
+      pendingAnswer: { playerName, optionIndex, timestamp: Date.now() },
+    }
+    await setGameState(roomId, updated)
+    setLocalGameState(updated)
+  }, [gameState, playerName, roomId])
+
   const submitAnswer = useCallback(async (selectedIndex) => {
     if (!gameState || isActingRef.current) return
     if (gameState.currentTurn !== playerName) return
@@ -153,6 +166,7 @@ export function useGameState(roomId, playerName) {
         currentQuestion: null,
         currentCategory: null,
         pendingCategory: null,
+        pendingAnswer: null,
         usedQuestions,
         answerResult: {
           playerName,
@@ -201,6 +215,7 @@ export function useGameState(roomId, playerName) {
         currentQuestion: null,
         currentCategory: null,
         pendingCategory: null,
+        pendingAnswer: null,
         usedQuestions,
         answerResult: {
           playerName: gameState.currentTurn,
@@ -252,6 +267,7 @@ export function useGameState(roomId, playerName) {
     initializeGame,
     spinWheel,
     confirmCategory,
+    reportPendingAnswer,
     submitAnswer,
     timeoutAnswer,
     restartGame,

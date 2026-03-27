@@ -51,6 +51,7 @@ export default function App() {
     initializeGame,
     spinWheel,
     confirmCategory,
+    reportPendingAnswer,
     submitAnswer,
     timeoutAnswer,
     restartGame,
@@ -285,6 +286,7 @@ export default function App() {
                 playerName={playerName}
                 onSubmitAnswer={handleSubmitAnswer}
                 onTimeout={handleTimeout}
+                onReportSelection={reportPendingAnswer}
               />
             </motion.div>
           )}
