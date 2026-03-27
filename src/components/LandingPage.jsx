@@ -34,7 +34,11 @@ const STARS = Array.from({ length: 40 }, (_, i) => ({
 
 export default function LandingPage({ onJoin }) {
   const [playerName, setPlayerName] = useState('')
-  const [roomId, setRoomId] = useState('')
+  const [roomId, setRoomId] = useState(() => {
+    // Pre-fill room code if arriving from an invite link (?room=ABC123)
+    const params = new URLSearchParams(window.location.search)
+    return (params.get('room') || '').toUpperCase()
+  })
   const [nameError, setNameError] = useState('')
   const [roomError, setRoomError] = useState('')
   const [nameFocused, setNameFocused] = useState(false)
