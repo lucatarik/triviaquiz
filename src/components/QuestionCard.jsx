@@ -62,9 +62,14 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
     return () => clearInterval(timerRef.current)
   }, [question?.id, hasAnswered, isMyTurn])
 
+  const [speedBonus, setSpeedBonus] = useState(false)
+
   const handleSelectAnswer = useCallback(async (optionIndex) => {
     if (!isMyTurn || hasAnswered || selectedAnswer !== null) return
     clearInterval(timerRef.current)
+    // Determine speed bonus locally for immediate feedback (timeLeft > 10 means < 5s elapsed)
+    const isSpeedBonus = timeLeft > 10
+    setSpeedBonus(isSpeedBonus)
     setSelectedAnswer(optionIndex)
     setHasAnswered(true)
     setShowResult(true)
@@ -76,7 +81,7 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
     setTimeout(() => {
       onSubmitAnswer && onSubmitAnswer(optionIndex)
     }, 1500)
-  }, [isMyTurn, hasAnswered, selectedAnswer, onSubmitAnswer, onReportSelection])
+  }, [isMyTurn, hasAnswered, selectedAnswer, timeLeft, onSubmitAnswer, onReportSelection])
 
   if (!question || !category) return null
 
@@ -117,6 +122,9 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
   }
 
   const timerColor = timeLeft <= 5 ? '#ef4444' : timeLeft <= 10 ? '#f97316' : '#7c3aed'
+  // Speed bonus window: first 5 seconds of 15
+  const bonusActive = isMyTurn && timeLeft > 10 && !hasAnswered
+  const bonusPct = Math.max(0, Math.min(100, ((timeLeft - 10) / 5) * 100))
 
   return (
     <motion.div
@@ -125,7 +133,7 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
       exit={{ opacity: 0, y: -30 }}
       className="w-full max-w-sm mx-auto px-3"
     >
-      {/* Category badge */}
+      {/* Category badge + timer */}
       <div className="flex items-center justify-between mb-3">
         <div
           className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold"
@@ -136,6 +144,15 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
         </div>
         {isMyTurn && (
           <div className="flex items-center gap-1.5">
+            {bonusActive && (
+              <motion.span
+                animate={{ scale: [1, 1.2, 1], opacity: [0.8, 1, 0.8] }}
+                transition={{ duration: 0.6, repeat: Infinity }}
+                className="text-yellow-400 text-xs font-black"
+              >
+                ⚡+2
+              </motion.span>
+            )}
             <Clock size={14} className={timeLeft <= 5 ? 'text-red-400' : 'text-white/50'} />
             <motion.span
               key={timeLeft}
@@ -149,15 +166,32 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
         )}
       </div>
 
-      {/* Timer bar */}
+      {/* Timer bars */}
       {isMyTurn && (
-        <div className="mb-4 h-1.5 bg-white/10 rounded-full overflow-hidden">
-          <motion.div
-            className="h-full rounded-full"
-            style={{ backgroundColor: timerColor, transition: 'background-color 0.5s ease' }}
-            animate={{ width: `${(timeLeft / TIMER_DURATION) * 100}%` }}
-            transition={{ duration: 1, ease: 'linear' }}
-          />
+        <div className="mb-4 space-y-1.5">
+          {/* Main bar (15s) */}
+          <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full rounded-full"
+              style={{ backgroundColor: timerColor, transition: 'background-color 0.5s ease' }}
+              animate={{ width: `${(timeLeft / TIMER_DURATION) * 100}%` }}
+              transition={{ duration: 1, ease: 'linear' }}
+            />
+          </div>
+          {/* Speed bonus bar (first 5s window) */}
+          <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full rounded-full"
+              style={{ backgroundColor: bonusActive ? '#facc15' : 'transparent' }}
+              animate={{ width: `${bonusPct}%`, opacity: bonusActive ? 1 : 0 }}
+              transition={{ duration: 1, ease: 'linear' }}
+            />
+          </div>
+          {bonusActive && (
+            <p className="text-yellow-400/60 text-[10px] text-right font-semibold">
+              Rispondi ora per +2 punti!
+            </p>
+          )}
         </div>
       )}
 
@@ -264,16 +298,21 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
       <AnimatePresence>
         {showResult && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, scale: 0.9, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
             className={`mt-4 p-3 rounded-xl text-center font-bold text-sm ${
               isCorrect
                 ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                 : 'bg-red-500/20 text-red-400 border border-red-500/30'
             }`}
           >
-            {isCorrect ? '✅ Risposta corretta! +1 punto' : `❌ Risposta sbagliata! La corretta era: "${question.options[question.correct]}"`}
+            {isCorrect
+              ? speedBonus
+                ? '⚡ VELOCE! +2 punti!'
+                : '✅ Risposta corretta! +1 punto'
+              : `❌ Risposta sbagliata! La corretta era: "${question.options[question.correct]}"`}
           </motion.div>
         )}
       </AnimatePresence>

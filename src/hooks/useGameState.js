@@ -161,12 +161,17 @@ export function useGameState(roomId, playerName) {
     try {
       const question = gameState.currentQuestion
       const isCorrect = selectedIndex === question.correct
-      const players = { ...gameState.players }
 
+      // Speed bonus: +2 if answered within 5 seconds, +1 otherwise
+      const elapsed = Date.now() - (gameState.questionStartTime || Date.now())
+      const speedBonus = isCorrect && elapsed < 5000
+      const pointsEarned = isCorrect ? (speedBonus ? 2 : 1) : 0
+
+      const players = { ...gameState.players }
       if (isCorrect) {
         players[playerName] = {
           ...players[playerName],
-          score: (players[playerName].score || 0) + 1
+          score: (players[playerName].score || 0) + pointsEarned
         }
       }
 
@@ -182,9 +187,9 @@ export function useGameState(roomId, playerName) {
       const currentIndex = allPlayers.indexOf(playerName)
       const nextPlayer = allPlayers[(currentIndex + 1) % allPlayers.length]
 
-      // Check win condition (first to 10 points)
+      // Check win condition (first to 15 points)
       const newScore = players[playerName].score
-      const phase = newScore >= 10 ? 'ended' : 'spinning'
+      const phase = newScore >= 15 ? 'ended' : 'spinning'
 
       const updated = {
         ...gameState,
@@ -201,6 +206,9 @@ export function useGameState(roomId, playerName) {
           selectedIndex,
           correct: question.correct,
           isCorrect,
+          speedBonus,
+          pointsEarned,
+          elapsed,
           timestamp: Date.now(),
         },
         winner: phase === 'ended' ? playerName : null,

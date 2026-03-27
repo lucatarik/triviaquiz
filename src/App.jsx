@@ -269,7 +269,9 @@ export default function App() {
                     {gameState.answerResult.timedOut ? (
                       <span>⏰ Tempo scaduto per {gameState.answerResult.playerName}!</span>
                     ) : gameState.answerResult.isCorrect ? (
-                      <span>✅ {gameState.answerResult.playerName} ha risposto correttamente!</span>
+                      gameState.answerResult.speedBonus
+                        ? <span>⚡ {gameState.answerResult.playerName} ha risposto in meno di 5s! +2 punti!</span>
+                        : <span>✅ {gameState.answerResult.playerName} ha risposto correttamente! +1 punto</span>
                     ) : (
                       <span>❌ {gameState.answerResult.playerName} ha sbagliato la risposta!</span>
                     )}
