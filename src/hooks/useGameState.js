@@ -30,7 +30,7 @@ export function useGameState(roomId, playerName) {
           ...state,
           players: {
             ...state.players,
-            [playerName]: { score: 0, connected: true, joinedAt: Date.now() }
+            [playerName]: { score: 0, connected: true, joinedAt: Date.now(), correctCount: 0, bombsUsed: 0 }
           },
           phase: Object.keys(state.players).length === 1 ? 'spinning' : state.phase,
           answerResult: null,
@@ -170,11 +170,13 @@ export function useGameState(roomId, playerName) {
       const pointsEarned = isCorrect ? (speedBonus ? 2 : 1) : 0
 
       const players = { ...gameState.players }
-      if (isCorrect) {
-        players[playerName] = {
-          ...players[playerName],
-          score: (players[playerName].score || 0) + pointsEarned
-        }
+      const prevPlayer = players[playerName] || {}
+      const newCorrectCount = (prevPlayer.correctCount || 0) + (isCorrect ? 1 : 0)
+      players[playerName] = {
+        ...prevPlayer,
+        score: (prevPlayer.score || 0) + pointsEarned,
+        correctCount: newCorrectCount,
+        bombsUsed: prevPlayer.bombsUsed || 0,
       }
 
       // Track used questions
@@ -273,12 +275,32 @@ export function useGameState(roomId, playerName) {
     }
   }, [gameState, roomId])
 
+  const useBomb = useCallback(async () => {
+    if (!gameState || isActingRef.current) return
+    if (gameState.currentTurn !== playerName) return
+    if (gameState.phase !== 'question') return
+    const player = gameState.players[playerName] || {}
+    const correctCount = player.correctCount || 0
+    const bombsUsed = player.bombsUsed || 0
+    if (Math.floor(correctCount / 3) - bombsUsed <= 0) return
+
+    const updated = {
+      ...gameState,
+      players: {
+        ...gameState.players,
+        [playerName]: { ...player, bombsUsed: bombsUsed + 1 },
+      },
+    }
+    await setGameState(roomId, updated)
+    setLocalGameState(updated)
+  }, [gameState, playerName, roomId])
+
   const restartGame = useCallback(async () => {
     if (!gameState) return
     const playerNames = Object.keys(gameState.players)
     const newPlayers = {}
     playerNames.forEach(name => {
-      newPlayers[name] = { score: 0, connected: true, joinedAt: Date.now() }
+      newPlayers[name] = { score: 0, connected: true, joinedAt: Date.now(), correctCount: 0, bombsUsed: 0 }
     })
 
     const updated = {
@@ -310,6 +332,7 @@ export function useGameState(roomId, playerName) {
     reportPendingAnswer,
     submitAnswer,
     timeoutAnswer,
+    useBomb,
     restartGame,
     forceRefresh,
   }

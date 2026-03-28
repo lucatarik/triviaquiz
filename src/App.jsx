@@ -56,6 +56,7 @@ export default function App() {
     reportPendingAnswer,
     submitAnswer,
     timeoutAnswer,
+    useBomb,
     restartGame,
   } = useGameState(ready ? roomId : null, ready ? playerName : null)
 
@@ -316,6 +317,7 @@ export default function App() {
                 onSubmitAnswer={handleSubmitAnswer}
                 onTimeout={handleTimeout}
                 onReportSelection={reportPendingAnswer}
+                onUseBomb={useBomb}
               />
             </motion.div>
           )}

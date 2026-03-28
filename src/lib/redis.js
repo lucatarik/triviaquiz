@@ -88,7 +88,7 @@ export function createInitialGameState(roomId, playerName) {
   return {
     roomId,
     players: {
-      [playerName]: { score: 0, connected: true, joinedAt: Date.now() }
+      [playerName]: { score: 0, connected: true, joinedAt: Date.now(), correctCount: 0, bombsUsed: 0 }
     },
     currentTurn: playerName,
     phase: 'waiting',

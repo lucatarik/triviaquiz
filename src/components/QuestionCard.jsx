@@ -6,12 +6,13 @@ import { useCheat } from '../hooks/useCheat'
 
 const TIMER_DURATION = 15
 
-export default function QuestionCard({ gameState, playerName, onSubmitAnswer, onTimeout, onReportSelection }) {
+export default function QuestionCard({ gameState, playerName, onSubmitAnswer, onTimeout, onReportSelection, onUseBomb }) {
   const cheatActive = useCheat()
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION)
   const [hasAnswered, setHasAnswered] = useState(false)
   const [showResult, setShowResult] = useState(false)
+  const [eliminatedIndices, setEliminatedIndices] = useState([])
   const timerRef = useRef(null)
   const hasTimedOutRef = useRef(false)
   const questionIdRef = useRef(null)
@@ -37,6 +38,7 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
     setTimeLeft(TIMER_DURATION)
     setHasAnswered(false)
     setShowResult(false)
+    setEliminatedIndices([])
     hasTimedOutRef.current = false
   }, [question?.id])
 
@@ -62,10 +64,29 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
     return () => clearInterval(timerRef.current)
   }, [question?.id, hasAnswered, isMyTurn])
 
+  // Bomb lifeline
+  const playerData = gameState?.players?.[playerName] || {}
+  const correctCount = playerData.correctCount || 0
+  const bombsUsed = playerData.bombsUsed || 0
+  const bombsAvailable = Math.floor(correctCount / 3) - bombsUsed
+  const bombReady = isMyTurn && bombsAvailable > 0 && !hasAnswered && eliminatedIndices.length === 0
+
+  const handleBomb = useCallback(() => {
+    if (!bombReady || !question) return
+    // Pick 2 wrong indices at random
+    const wrongIndices = question.options
+      .map((_, i) => i)
+      .filter(i => i !== question.correct)
+    const shuffled = wrongIndices.sort(() => Math.random() - 0.5)
+    setEliminatedIndices(shuffled.slice(0, 2))
+    onUseBomb && onUseBomb()
+  }, [bombReady, question, onUseBomb])
+
   const [speedBonus, setSpeedBonus] = useState(false)
 
   const handleSelectAnswer = useCallback(async (optionIndex) => {
     if (!isMyTurn || hasAnswered || selectedAnswer !== null) return
+    if (eliminatedIndices.includes(optionIndex)) return
     clearInterval(timerRef.current)
     // Determine speed bonus locally for immediate feedback (timeLeft > 10 means < 5s elapsed)
     const isSpeedBonus = timeLeft > 10
@@ -96,6 +117,11 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
 
     if (cheatHighlight) {
       return 'bg-white/10 border-white shadow-[0_0_15px_rgba(255,255,255,0.9)] ring-2 ring-white'
+    }
+
+    // Eliminated by bomb — shown before answering only
+    if (!showResult && eliminatedIndices.includes(index)) {
+      return 'bg-white/3 border-white/8 opacity-30 line-through cursor-not-allowed'
     }
 
     if (!showResult) {
@@ -195,6 +221,44 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
         </div>
       )}
 
+      {/* Bomb lifeline */}
+      {isMyTurn && (
+        <div className="flex justify-end mb-2 min-h-[36px]">
+          <AnimatePresence>
+            {bombReady && (
+              <motion.button
+                key="bomb"
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                whileTap={{ scale: 0.88 }}
+                onClick={handleBomb}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-black border border-red-500/50 bg-red-500/15 text-red-400"
+                title="Elimina 2 risposte sbagliate"
+              >
+                <motion.span
+                  animate={{ rotate: [0, -15, 15, -10, 10, 0] }}
+                  transition={{ duration: 0.6, repeat: Infinity, repeatDelay: 1.5 }}
+                >
+                  💣
+                </motion.span>
+                Usa bomba
+              </motion.button>
+            )}
+            {eliminatedIndices.length > 0 && !hasAnswered && (
+              <motion.span
+                key="bombed"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-xs text-white/30 self-center px-2 py-1.5"
+              >
+                💣 Bomba usata
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
       {/* Question card */}
       <motion.div
         className="glass rounded-2xl p-5 mb-4 shadow-xl"
@@ -237,7 +301,7 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
           <motion.button
             key={`${question.id}-${index}`}
             onClick={() => handleSelectAnswer(index)}
-            disabled={!isMyTurn || hasAnswered}
+            disabled={!isMyTurn || hasAnswered || eliminatedIndices.includes(index)}
             whileTap={isMyTurn && !hasAnswered ? { scale: 0.96 } : {}}
             className={`
               relative p-3 rounded-xl border text-left transition-all
