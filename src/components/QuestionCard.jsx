@@ -7,7 +7,7 @@ import CategoryMascot from './CategoryMascot'
 
 const TIMER_DURATION = 15
 
-export default function QuestionCard({ gameState, playerName, onSubmitAnswer, onTimeout, onReportSelection, onUseBomb }) {
+export default function QuestionCard({ gameState, playerName, correctCount = 0, bombsUsed = 0, onSubmitAnswer, onTimeout, onReportSelection, onUseBomb }) {
   const cheatActive = useCheat()
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION)
@@ -65,10 +65,7 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
     return () => clearInterval(timerRef.current)
   }, [question?.id, hasAnswered, isMyTurn])
 
-  // Bomb lifeline
-  const playerData = gameState?.players?.[playerName] || {}
-  const correctCount = playerData.correctCount || 0
-  const bombsUsed = playerData.bombsUsed || 0
+  // Bomb lifeline — counts come from App.jsx local state to avoid Redis race conditions
   const bombsAvailable = Math.floor(correctCount / 3) - bombsUsed
   const bombReady = isMyTurn && bombsAvailable > 0 && !hasAnswered && eliminatedIndices.length === 0
 

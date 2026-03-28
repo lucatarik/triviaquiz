@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import LandingPage from './components/LandingPage'
 import WaitingRoom from './components/WaitingRoom'
@@ -53,10 +53,30 @@ export default function App() {
     setAuthState({ player: '', room: '', ready: false })
   }, [])
 
+  // Detect when the other player clicks "Torna alla home" during ended phase
+  useEffect(() => {
+    if (!gameState?.leftGame) return
+    if (gameState.leftGame === playerName) return // it was us
+    if (leftGameHandledRef.current === gameState.leftGame) return
+    leftGameHandledRef.current = gameState.leftGame
+    setLeftGameMsg(`${gameState.leftGame} non ha accettato la rivincita`)
+    // Auto-redirect after 3s
+    const t = setTimeout(() => {
+      clearUrlParams()
+      setAuthState({ player: '', room: '', ready: false })
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [gameState?.leftGame, playerName])
+
+  const [leftGameMsg, setLeftGameMsg] = useState(null) // "Player X non ha accettato la rivincita"
+  const leftGameHandledRef = useRef(null)
+
   const {
     gameState,
     loading,
     error,
+    localCorrectCount,
+    localBombsUsed,
     initializeGame,
     broadcastSpinStart,
     spinWheel,
@@ -66,6 +86,7 @@ export default function App() {
     submitAnswer,
     timeoutAnswer,
     useBomb,
+    leaveGame,
     restartGame,
   } = useGameState(ready ? roomId : null, ready ? playerName : null, handleRoomExpired)
 
@@ -164,10 +185,13 @@ export default function App() {
     setAuthState({ player: name, room, ready: true })
   }, [])
 
-  const handleHome = useCallback(() => {
+  const handleHome = useCallback(async (skipLeave = false) => {
+    if (!skipLeave && gameState?.phase === 'ended') {
+      await leaveGame()
+    }
     clearUrlParams()
     setAuthState({ player: '', room: '', ready: false })
-  }, [])
+  }, [gameState?.phase, leaveGame])
 
   const handleSpinStart = useCallback((angle, duration) => {
     broadcastSpinStart(angle, duration)
@@ -378,6 +402,8 @@ export default function App() {
               <QuestionCard
                 gameState={gameState}
                 playerName={playerName}
+                correctCount={localCorrectCount}
+                bombsUsed={localBombsUsed}
                 onSubmitAnswer={handleSubmitAnswer}
                 onTimeout={handleTimeout}
                 onReportSelection={reportPendingAnswer}
@@ -401,6 +427,22 @@ export default function App() {
         playerName={playerName}
         onConfirm={confirmCategory}
       />
+
+      {/* "Player left" notification overlay */}
+      {leftGameMsg && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(8px)' }}
+        >
+          <div className="glass rounded-3xl p-6 text-center max-w-xs">
+            <div className="text-4xl mb-3">👋</div>
+            <p className="text-white font-bold text-base">{leftGameMsg}</p>
+            <p className="text-white/40 text-sm mt-2">Ritorno alla home...</p>
+          </div>
+        </motion.div>
+      )}
 
       {/* Debug info in dev */}
       {import.meta.env.DEV && (

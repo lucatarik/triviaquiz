@@ -10,6 +10,10 @@ export function useGameState(roomId, playerName, onRoomExpired) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const isActingRef = useRef(false)
+  // Local-only bomb counters — never stored in Redis to avoid race conditions
+  // (any opponent write spreads gameState, which can overwrite a freshly-updated count)
+  const [localCorrectCount, setLocalCorrectCount] = useState(0)
+  const [localBombsUsed, setLocalBombsUsed] = useState(0)
 
   const handleStateUpdate = useCallback((newState) => {
     setLocalGameState(newState)
@@ -231,12 +235,10 @@ export function useGameState(roomId, playerName, onRoomExpired) {
 
       const players = { ...gameState.players }
       const prevPlayer = players[playerName] || {}
-      const newCorrectCount = (prevPlayer.correctCount || 0) + (isCorrect ? 1 : 0)
+      if (isCorrect) setLocalCorrectCount(prev => prev + 1)
       players[playerName] = {
         ...prevPlayer,
         score: (prevPlayer.score || 0) + pointsEarned,
-        correctCount: newCorrectCount,
-        bombsUsed: prevPlayer.bombsUsed || 0,
       }
 
       // Track used questions
@@ -337,25 +339,9 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     }
   }, [gameState, roomId])
 
-  const useBomb = useCallback(async () => {
-    if (!gameState || isActingRef.current) return
-    if (gameState.currentTurn !== playerName) return
-    if (gameState.phase !== 'question') return
-    const player = gameState.players[playerName] || {}
-    const correctCount = player.correctCount || 0
-    const bombsUsed = player.bombsUsed || 0
-    if (Math.floor(correctCount / 3) - bombsUsed <= 0) return
-
-    const updated = {
-      ...gameState,
-      players: {
-        ...gameState.players,
-        [playerName]: { ...player, bombsUsed: bombsUsed + 1 },
-      },
-    }
-    await setGameState(roomId, updated)
-    setLocalGameState(updated)
-  }, [gameState, playerName, roomId])
+  const useBomb = useCallback(() => {
+    setLocalBombsUsed(prev => prev + 1)
+  }, [])
 
   const restartGame = useCallback(async () => {
     if (!gameState) return
@@ -384,7 +370,10 @@ export function useGameState(roomId, playerName, onRoomExpired) {
         winner: null,
         endedAt: null,
         readyToRestart: [],
+        leftGame: null,
       }
+      setLocalCorrectCount(0)
+      setLocalBombsUsed(0)
       await setGameState(roomId, updated)
       setLocalGameState(updated)
     } else {
@@ -395,10 +384,18 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     }
   }, [gameState, roomId, playerName])
 
+  const leaveGame = useCallback(async () => {
+    if (!gameState) return
+    const updated = { ...gameState, leftGame: playerName }
+    await setGameState(roomId, updated)
+  }, [gameState, playerName, roomId])
+
   return {
     gameState,
     loading,
     error,
+    localCorrectCount,
+    localBombsUsed,
     initializeGame,
     broadcastSpinStart,
     spinWheel,
@@ -408,6 +405,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     submitAnswer,
     timeoutAnswer,
     useBomb,
+    leaveGame,
     restartGame,
     forceRefresh,
   }
