@@ -56,14 +56,26 @@ export function useGameState(roomId, playerName) {
     }
   }, [roomId, playerName])
 
+  // Called at the START of the spin so the observer can see the animation
+  // Not guarded by isActingRef — lightweight fire-and-forget
+  const broadcastSpinStart = useCallback(async (targetAngle, duration) => {
+    if (!gameState || gameState.currentTurn !== playerName) return
+    const updated = {
+      ...gameState,
+      isSpinning: true,
+      spinTargetAngle: targetAngle,
+      spinDuration: duration,
+      spinStartTime: Date.now(),
+    }
+    await setGameState(roomId, updated)
+  }, [gameState, playerName, roomId])
+
   const spinWheel = useCallback(async (targetAngle, selectedCategoryFromWheel) => {
     if (!gameState || isActingRef.current) return
     if (gameState.currentTurn !== playerName) return
     isActingRef.current = true
 
     try {
-      // Prefer the category passed directly from the Wheel animation (authoritative).
-      // Fallback: recalculate using the same formula as Wheel.jsx (with +sliceSize/2 offset)
       let selectedCategory = selectedCategoryFromWheel
       if (!selectedCategory) {
         const sliceSize = 360 / CATEGORIES.length
@@ -73,7 +85,6 @@ export function useGameState(roomId, playerName) {
         selectedCategory = CATEGORIES[categoryIndex]
       }
 
-      // Jolly → let the active player choose the category
       const nextPhase = selectedCategory.isJolly ? 'jolly_pick' : 'category_confirm'
 
       const updated = {
@@ -82,6 +93,10 @@ export function useGameState(roomId, playerName) {
         wheelAngle: targetAngle,
         currentCategory: selectedCategory.isJolly ? null : selectedCategory.id,
         pendingCategory: selectedCategory.isJolly ? null : selectedCategory,
+        isSpinning: false,
+        spinTargetAngle: null,
+        spinDuration: null,
+        spinStartTime: null,
       }
       await setGameState(roomId, updated)
       setLocalGameState(updated)
@@ -340,6 +355,7 @@ export function useGameState(roomId, playerName) {
     loading,
     error,
     initializeGame,
+    broadcastSpinStart,
     spinWheel,
     confirmCategory,
     selectJollyCategory,

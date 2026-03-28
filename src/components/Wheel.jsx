@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { motion, useAnimation } from 'framer-motion'
 import { CATEGORIES } from '../data/questions'
 
@@ -30,22 +30,54 @@ const CX = SIZE / 2
 const CY = SIZE / 2
 const R = SIZE / 2 - 4
 
-export default function Wheel({ onSpinComplete, isMyTurn, initialAngle = 0 }) {
+export default function Wheel({ onSpinComplete, onSpinStart, isMyTurn, initialAngle = 0, spinData }) {
   const [isSpinning, setIsSpinning] = useState(false)
   const [currentAngle, setCurrentAngle] = useState(initialAngle)
   const controls = useAnimation()
   const wheelRef = useRef(null)
+  const observedSpinRef = useRef(null) // tracks the spinStartTime we last animated
+
+  // Observer: play the opponent's spin animation when detected via polling
+  useEffect(() => {
+    if (isMyTurn) return
+    if (!spinData?.isSpinning || !spinData.spinStartTime || spinData.spinTargetAngle == null) return
+    // Avoid re-triggering the same spin
+    if (observedSpinRef.current === spinData.spinStartTime) return
+    observedSpinRef.current = spinData.spinStartTime
+
+    const elapsed = (Date.now() - spinData.spinStartTime) / 1000
+    const totalDuration = spinData.spinDuration || 4
+    const remaining = totalDuration - elapsed
+
+    if (remaining <= 0.3) {
+      // Spin already nearly done — just snap to final angle
+      setCurrentAngle(spinData.spinTargetAngle)
+      controls.set({ rotate: spinData.spinTargetAngle })
+      return
+    }
+
+    setIsSpinning(true)
+    controls.start({
+      rotate: spinData.spinTargetAngle,
+      transition: { duration: remaining, ease: [0.17, 0.67, 0.16, 0.99] },
+    }).then(() => {
+      setCurrentAngle(spinData.spinTargetAngle)
+      setIsSpinning(false)
+    })
+  }, [isMyTurn, spinData?.isSpinning, spinData?.spinStartTime])
 
   const spin = useCallback(async () => {
     if (isSpinning || !isMyTurn) return
     setIsSpinning(true)
 
-    // Random spin: 3-5 full rotations + random landing
     const extraRotations = (Math.floor(Math.random() * 5) + 5) * 360
     const randomOffset = Math.random() * 360
     const targetAngle = currentAngle + extraRotations + randomOffset
 
     const duration = 3.5 + Math.random() * 1.5
+
+    // Broadcast spin start so the observer can play the animation too
+    onSpinStart && onSpinStart(targetAngle, duration)
 
     await controls.start({
       rotate: targetAngle,
@@ -67,7 +99,7 @@ export default function Wheel({ onSpinComplete, isMyTurn, initialAngle = 0 }) {
     const selectedCategory = CATEGORIES[sliceIndex]
 
     onSpinComplete && onSpinComplete(targetAngle, selectedCategory)
-  }, [isSpinning, isMyTurn, currentAngle, controls, onSpinComplete])
+  }, [isSpinning, isMyTurn, currentAngle, controls, onSpinComplete, onSpinStart])
 
   return (
     <div className="flex flex-col items-center gap-4">

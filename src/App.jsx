@@ -53,6 +53,7 @@ export default function App() {
     loading,
     error,
     initializeGame,
+    broadcastSpinStart,
     spinWheel,
     confirmCategory,
     selectJollyCategory,
@@ -146,6 +147,10 @@ export default function App() {
     clearUrlParams()
     setAuthState({ player: '', room: '', ready: false })
   }, [])
+
+  const handleSpinStart = useCallback((angle, duration) => {
+    broadcastSpinStart(angle, duration)
+  }, [broadcastSpinStart])
 
   const handleSpinComplete = useCallback((angle, selectedCategory) => {
     spinWheel(angle, selectedCategory)
@@ -282,8 +287,15 @@ export default function App() {
 
               <Wheel
                 onSpinComplete={handleSpinComplete}
+                onSpinStart={handleSpinStart}
                 isMyTurn={isMyTurn && !wheelLocked}
                 initialAngle={gameState.wheelAngle || 0}
+                spinData={{
+                  isSpinning: gameState.isSpinning,
+                  spinStartTime: gameState.spinStartTime,
+                  spinTargetAngle: gameState.spinTargetAngle,
+                  spinDuration: gameState.spinDuration,
+                }}
               />
 
               {/* Answer result from previous question */}
