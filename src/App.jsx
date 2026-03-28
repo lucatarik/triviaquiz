@@ -9,6 +9,7 @@ import JollyPicker from './components/JollyPicker'
 import QuestionCard from './components/QuestionCard'
 import ScoreBoard from './components/ScoreBoard'
 import { useGameState } from './hooks/useGameState'
+import { deleteGameState } from './lib/redis'
 
 function getUrlParams() {
   const params = new URLSearchParams(window.location.search)
@@ -42,6 +43,8 @@ export default function App() {
   const [timerActive, setTimerActive] = useState(false)
   // Brief lock after each answer so both players see the result before the wheel re-appears
   const [wheelLocked, setWheelLocked] = useState(false)
+  // End-of-game expiry countdown (150s)
+  const [endTimeLeft, setEndTimeLeft] = useState(null)
 
   const { player: playerName, room: roomId, ready } = authState
 
@@ -79,6 +82,33 @@ export default function App() {
     const t = setTimeout(() => setWheelLocked(false), 2500)
     return () => clearTimeout(t)
   }, [gameState?.answerResult?.timestamp])
+
+  // 150s end-of-game expiry: if both players don't restart, delete room and go home
+  useEffect(() => {
+    if (gameState?.phase !== 'ended' || !gameState?.endedAt) {
+      setEndTimeLeft(null)
+      return
+    }
+    const EXPIRY = 150
+    const elapsed = Math.floor((Date.now() - gameState.endedAt) / 1000)
+    const remaining = Math.max(0, EXPIRY - elapsed)
+    setEndTimeLeft(remaining)
+    if (remaining <= 0) {
+      deleteGameState(roomId).then(() => handleHome())
+      return
+    }
+    const interval = setInterval(() => {
+      setEndTimeLeft(prev => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          deleteGameState(roomId).then(() => handleHome())
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [gameState?.phase, gameState?.endedAt])
 
   // Timer management for question phase
   useEffect(() => {
@@ -188,6 +218,7 @@ export default function App() {
         playerName={playerName}
         onRestart={handleRestart}
         onHome={handleHome}
+        endTimeLeft={endTimeLeft}
       />
     )
   }

@@ -1,8 +1,8 @@
 import React from 'react'
-import { motion } from 'framer-motion'
-import { Trophy, Star, RefreshCw, Home } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Trophy, Star, RefreshCw, Home, Clock } from 'lucide-react'
 
-export default function ScoreBoard({ gameState, playerName, onRestart, onHome }) {
+export default function ScoreBoard({ gameState, playerName, onRestart, onHome, endTimeLeft }) {
   if (!gameState) return null
 
   const players = Object.entries(gameState.players).sort(([, a], [, b]) => (b.score || 0) - (a.score || 0))
@@ -10,7 +10,15 @@ export default function ScoreBoard({ gameState, playerName, onRestart, onHome })
   const isWinner = winner === playerName
   const isDraw = !winner
 
+  const readyToRestart = gameState.readyToRestart || []
+  const iHaveVoted = readyToRestart.includes(playerName)
+  const otherPlayers = Object.keys(gameState.players).filter(n => n !== playerName)
+  const opponentHasVoted = otherPlayers.some(n => readyToRestart.includes(n))
+
   const medals = ['🥇', '🥈', '🥉']
+
+  const timerColor = endTimeLeft !== null && endTimeLeft <= 30 ? '#ef4444' : '#a78bfa'
+  const timerPct = endTimeLeft !== null ? (endTimeLeft / 150) * 100 : 100
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
@@ -118,7 +126,6 @@ export default function ScoreBoard({ gameState, playerName, onRestart, onHome })
                     <div className="text-white/40 text-xs">
                       {isThisWinner ? '🏆 Vincitore!' : index > 0 ? 'Buona partita' : ''}
                     </div>
-                    {/* Mini progress bar */}
                     <div className="mt-1.5 h-1.5 bg-white/10 rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
@@ -149,7 +156,6 @@ export default function ScoreBoard({ gameState, playerName, onRestart, onHome })
             })}
           </div>
 
-          {/* Stats */}
           <div className="px-4 pb-4">
             <div className="grid grid-cols-2 gap-2 pt-3 border-t border-white/10">
               {[
@@ -187,18 +193,85 @@ export default function ScoreBoard({ gameState, playerName, onRestart, onHome })
           </motion.div>
         )}
 
+        {/* Expiry countdown bar */}
+        {endTimeLeft !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mb-4"
+          >
+            <div className="flex items-center justify-between mb-1.5 text-xs">
+              <span className="text-white/40 flex items-center gap-1">
+                <Clock size={11} />
+                La stanza scade tra
+              </span>
+              <motion.span
+                key={endTimeLeft}
+                initial={{ scale: 1.2 }}
+                animate={{ scale: 1 }}
+                className="font-mono font-black"
+                style={{ color: timerColor }}
+              >
+                {endTimeLeft}s
+              </motion.span>
+            </div>
+            <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full rounded-full"
+                style={{ backgroundColor: timerColor, transition: 'background-color 1s ease' }}
+                animate={{ width: `${timerPct}%` }}
+                transition={{ duration: 1, ease: 'linear' }}
+              />
+            </div>
+          </motion.div>
+        )}
+
         {/* Action buttons */}
         <div className="space-y-3">
-          <motion.button
-            onClick={onRestart}
-            whileTap={{ scale: 0.97 }}
-            whileHover={{ scale: 1.02 }}
-            className="w-full py-4 rounded-2xl font-black text-white text-base flex items-center justify-center gap-2"
-            style={{ background: 'linear-gradient(135deg, #7c3aed, #ec4899)' }}
-          >
-            <RefreshCw size={18} />
-            Gioca ancora!
-          </motion.button>
+          <AnimatePresence mode="wait">
+            {!iHaveVoted ? (
+              <motion.button
+                key="vote"
+                onClick={onRestart}
+                whileTap={{ scale: 0.97 }}
+                whileHover={{ scale: 1.02 }}
+                className="w-full py-4 rounded-2xl font-black text-white text-base flex items-center justify-center gap-2"
+                style={{ background: 'linear-gradient(135deg, #7c3aed, #ec4899)' }}
+              >
+                <RefreshCw size={18} />
+                Gioca ancora!
+              </motion.button>
+            ) : (
+              <motion.div
+                key="waiting"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="w-full py-4 rounded-2xl font-bold text-sm flex flex-col items-center justify-center gap-1 border border-purple-500/30 bg-purple-500/10"
+              >
+                <div className="flex items-center gap-2 text-purple-300">
+                  <motion.span
+                    animate={{ opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                  >
+                    ⏳
+                  </motion.span>
+                  {opponentHasVoted
+                    ? 'Entrambi pronti, riavvio...'
+                    : 'In attesa dell\'avversario...'}
+                </div>
+                <div className="flex gap-4 mt-1 text-xs text-white/40">
+                  <span className={iHaveVoted ? 'text-green-400' : 'text-white/30'}>
+                    {iHaveVoted ? '✓' : '○'} Tu
+                  </span>
+                  {otherPlayers.map(n => (
+                    <span key={n} className={opponentHasVoted ? 'text-green-400' : 'text-white/30'}>
+                      {opponentHasVoted ? '✓' : '○'} {n}
+                    </span>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <motion.button
             onClick={onHome}

@@ -205,6 +205,8 @@ export function useGameState(roomId, playerName) {
         pendingCategory: null,
         pendingAnswer: null,
         usedQuestions,
+        endedAt: phase === 'ended' ? Date.now() : gameState.endedAt ?? null,
+        readyToRestart: phase === 'ended' ? [] : (gameState.readyToRestart ?? []),
         answerResult: {
           playerName,
           selectedIndex,
@@ -297,29 +299,41 @@ export function useGameState(roomId, playerName) {
 
   const restartGame = useCallback(async () => {
     if (!gameState) return
-    const playerNames = Object.keys(gameState.players)
-    const newPlayers = {}
-    playerNames.forEach(name => {
-      newPlayers[name] = { score: 0, connected: true, joinedAt: Date.now(), correctCount: 0, bombsUsed: 0 }
-    })
+    // Re-fetch fresh state to avoid stale readyToRestart
+    const current = (await getGameState(roomId)) || gameState
+    const readyToRestart = [...new Set([...(current.readyToRestart || []), playerName])]
+    const allPlayers = Object.keys(current.players)
 
-    const updated = {
-      ...gameState,
-      players: newPlayers,
-      currentTurn: playerNames[0],
-      phase: 'spinning',
-      currentCategory: null,
-      currentQuestion: null,
-      pendingCategory: null,
-      wheelAngle: 0,
-      usedQuestions: {},
-      answerResult: null,
-      winner: null,
+    if (readyToRestart.length >= allPlayers.length) {
+      // Both voted — do the actual restart
+      const newPlayers = {}
+      allPlayers.forEach(name => {
+        newPlayers[name] = { score: 0, connected: true, joinedAt: Date.now(), correctCount: 0, bombsUsed: 0 }
+      })
+      const updated = {
+        ...current,
+        players: newPlayers,
+        currentTurn: allPlayers[0],
+        phase: 'spinning',
+        currentCategory: null,
+        currentQuestion: null,
+        pendingCategory: null,
+        wheelAngle: 0,
+        usedQuestions: {},
+        answerResult: null,
+        winner: null,
+        endedAt: null,
+        readyToRestart: [],
+      }
+      await setGameState(roomId, updated)
+      setLocalGameState(updated)
+    } else {
+      // Just register this player's vote
+      const updated = { ...current, readyToRestart }
+      await setGameState(roomId, updated)
+      setLocalGameState(updated)
     }
-
-    await setGameState(roomId, updated)
-    setLocalGameState(updated)
-  }, [gameState, roomId])
+  }, [gameState, roomId, playerName])
 
   return {
     gameState,
