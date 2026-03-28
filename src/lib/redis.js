@@ -53,8 +53,8 @@ export async function setGameState(roomId, state) {
     return withTimestamp
   }
   try {
-    // TTL of 24 hours
-    await client.set(key, withTimestamp, { ex: 86400 })
+    // TTL of 10 minutes of inactivity
+    await client.set(key, withTimestamp, { ex: 600 })
     return withTimestamp
   } catch (e) {
     console.error('Redis set error:', e)
@@ -67,6 +67,32 @@ export async function updateGameState(roomId, updater) {
   const current = await getGameState(roomId)
   const updated = updater(current)
   return setGameState(roomId, updated)
+}
+
+// Lightweight presence keys (TTL 30s) — separate from game state to avoid race conditions
+export async function setPresence(roomId, playerName) {
+  const client = getRedis()
+  const key = `presence:${roomId}:${playerName}`
+  if (!client) {
+    try { localStorage.setItem(key, Date.now()) } catch {}
+    return
+  }
+  try { await client.set(key, Date.now(), { ex: 30 }) } catch {}
+}
+
+export async function getPresence(roomId, playerName) {
+  const client = getRedis()
+  const key = `presence:${roomId}:${playerName}`
+  if (!client) {
+    try {
+      const v = localStorage.getItem(key)
+      return v ? Number(v) : null
+    } catch { return null }
+  }
+  try {
+    const v = await client.get(key)
+    return v ? Number(v) : null
+  } catch { return null }
 }
 
 export async function deleteGameState(roomId) {

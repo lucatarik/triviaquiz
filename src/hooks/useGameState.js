@@ -1,9 +1,11 @@
-import { useState, useCallback, useRef } from 'react'
-import { getGameState, setGameState, createInitialGameState } from '../lib/redis'
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { getGameState, setGameState, createInitialGameState, setPresence, getPresence } from '../lib/redis'
 import { useRealtime } from './useRealtime'
 import { CATEGORIES, getRandomQuestion } from '../data/questions'
 
-export function useGameState(roomId, playerName) {
+const PRESENCE_STALE_MS = 25000  // player considered disconnected after 25s without heartbeat
+
+export function useGameState(roomId, playerName, onRoomExpired) {
   const [gameState, setLocalGameState] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -14,7 +16,15 @@ export function useGameState(roomId, playerName) {
     setLoading(false)
   }, [])
 
-  const { forceRefresh } = useRealtime(roomId, handleStateUpdate, !!roomId)
+  const { forceRefresh } = useRealtime(roomId, handleStateUpdate, !!roomId, onRoomExpired)
+
+  // Heartbeat: write presence every 10s so the other player can detect disconnection
+  useEffect(() => {
+    if (!roomId || !playerName) return
+    setPresence(roomId, playerName)
+    const interval = setInterval(() => setPresence(roomId, playerName), 10000)
+    return () => clearInterval(interval)
+  }, [roomId, playerName])
 
   const initializeGame = useCallback(async () => {
     if (!roomId || !playerName) return
@@ -25,16 +35,51 @@ export function useGameState(roomId, playerName) {
         state = createInitialGameState(roomId, playerName)
         await setGameState(roomId, state)
       } else if (!state.players[playerName]) {
-        // Second player joining — reset leftover result state so wheelLocked doesn't fire
-        state = {
-          ...state,
-          players: {
-            ...state.players,
-            [playerName]: { score: 0, connected: true, joinedAt: Date.now(), correctCount: 0, bombsUsed: 0 }
-          },
-          phase: Object.keys(state.players).length === 1 ? 'spinning' : state.phase,
-          answerResult: null,
-          pendingAnswer: null,
+        const existingNames = Object.keys(state.players)
+
+        if (existingNames.length >= 2) {
+          // Room is full — check if one of the existing players has gone offline
+          const presences = await Promise.all(
+            existingNames.map(n => getPresence(roomId, n).then(ts => ({ name: n, ts })))
+          )
+          const now = Date.now()
+          const disconnected = presences
+            .filter(p => !p.ts || now - p.ts > PRESENCE_STALE_MS)
+            .sort((a, b) => (a.ts || 0) - (b.ts || 0))[0]
+
+          if (!disconnected) {
+            // Both players are active — can't join
+            setError('La stanza è piena. Entrambi i giocatori sono connessi.')
+            setLoading(false)
+            return
+          }
+
+          // Take over the disconnected player's slot
+          const oldName = disconnected.name
+          const oldData = state.players[oldName]
+          const newPlayers = { ...state.players }
+          delete newPlayers[oldName]
+          newPlayers[playerName] = { ...oldData, connected: true, joinedAt: Date.now() }
+
+          state = {
+            ...state,
+            players: newPlayers,
+            currentTurn: state.currentTurn === oldName ? playerName : state.currentTurn,
+            answerResult: null,
+            pendingAnswer: null,
+          }
+        } else {
+          // Second player joining normally
+          state = {
+            ...state,
+            players: {
+              ...state.players,
+              [playerName]: { score: 0, connected: true, joinedAt: Date.now(), correctCount: 0, bombsUsed: 0 }
+            },
+            phase: existingNames.length === 1 ? 'spinning' : state.phase,
+            answerResult: null,
+            pendingAnswer: null,
+          }
         }
         await setGameState(roomId, state)
       } else {
@@ -249,7 +294,7 @@ export function useGameState(roomId, playerName) {
     }
   }, [gameState, playerName, roomId])
 
-  const timeoutAnswer = useCallback(async () => {
+  const timeoutAnswer = useCallback(async (callerName) => {
     if (!gameState || isActingRef.current) return
     if (gameState.phase !== 'question') return
     isActingRef.current = true

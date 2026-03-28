@@ -1,7 +1,8 @@
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { CheckCircle, Sparkles } from 'lucide-react'
+import { CheckCircle } from 'lucide-react'
 import { CATEGORIES } from '../data/questions'
+import CategoryMascot from './CategoryMascot'
 
 export default function CategoryModal({ gameState, playerName, onConfirm }) {
   const categoryId = gameState?.currentCategory
@@ -30,43 +31,14 @@ export default function CategoryModal({ gameState, playerName, onConfirm }) {
         >
           {/* Header */}
           <div
-            className="p-6 text-center relative overflow-hidden"
-            style={{ backgroundColor: category.color + '22', borderBottom: `2px solid ${category.color}44` }}
+            className="pt-6 pb-4 text-center relative overflow-hidden"
+            style={{ backgroundColor: category.color + '18', borderBottom: `2px solid ${category.color}44` }}
           >
-            {/* Sparkles */}
-            {[...Array(6)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute"
-                style={{
-                  left: `${10 + i * 15}%`,
-                  top: `${20 + (i % 3) * 20}%`,
-                }}
-                animate={{
-                  y: [-10, -20, -10],
-                  opacity: [0, 1, 0],
-                  scale: [0, 1, 0],
-                }}
-                transition={{
-                  duration: 1.5,
-                  repeat: Infinity,
-                  delay: i * 0.25,
-                }}
-              >
-                <Sparkles size={12} style={{ color: category.color }} />
-              </motion.div>
-            ))}
-
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
-              className="text-7xl mb-3"
-            >
-              {category.emoji}
-            </motion.div>
-            <h2 className="text-2xl font-black text-white mb-1">{category.label}</h2>
+            <div className="flex justify-center mb-2">
+              <CategoryMascot categoryId={category.id} size="lg" showLabel={true} />
+            </div>
             <div
-              className="inline-block px-3 py-1 rounded-full text-sm font-bold"
+              className="inline-block px-3 py-1 rounded-full text-sm font-bold mt-1"
               style={{ backgroundColor: category.color + '33', color: category.color }}
             >
               Categoria selezionata!

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Clock, CheckCircle2, XCircle, Eye } from 'lucide-react'
 import { CATEGORIES } from '../data/questions'
 import { useCheat } from '../hooks/useCheat'
+import CategoryMascot from './CategoryMascot'
 
 const TIMER_DURATION = 15
 
@@ -161,12 +162,14 @@ export default function QuestionCard({ gameState, playerName, onSubmitAnswer, on
     >
       {/* Category badge + timer */}
       <div className="flex items-center justify-between mb-3">
-        <div
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold"
-          style={{ backgroundColor: category.color + '33', color: category.color }}
-        >
-          <span>{category.emoji}</span>
-          <span>{category.label}</span>
+        <div className="flex items-center gap-2">
+          <CategoryMascot categoryId={category.id} size="sm" showLabel={false} />
+          <div
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold"
+            style={{ backgroundColor: category.color + '33', color: category.color }}
+          >
+            <span>{category.label}</span>
+          </div>
         </div>
         {isMyTurn && (
           <div className="flex items-center gap-1.5">

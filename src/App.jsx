@@ -48,6 +48,11 @@ export default function App() {
 
   const { player: playerName, room: roomId, ready } = authState
 
+  const handleRoomExpired = useCallback(() => {
+    clearUrlParams()
+    setAuthState({ player: '', room: '', ready: false })
+  }, [])
+
   const {
     gameState,
     loading,
@@ -62,7 +67,7 @@ export default function App() {
     timeoutAnswer,
     useBomb,
     restartGame,
-  } = useGameState(ready ? roomId : null, ready ? playerName : null)
+  } = useGameState(ready ? roomId : null, ready ? playerName : null, handleRoomExpired)
 
   // Initialize game when auth is ready
   useEffect(() => {
@@ -83,6 +88,22 @@ export default function App() {
     const t = setTimeout(() => setWheelLocked(false), 2500)
     return () => clearTimeout(t)
   }, [gameState?.answerResult?.timestamp])
+
+  // Watchdog: if the active player disconnects during question phase, the observer
+  // triggers timeout after questionStartTime + 21s (15s timer + 6s grace)
+  useEffect(() => {
+    if (!gameState || gameState.phase !== 'question') return
+    if (gameState.currentTurn === playerName) return // we're the active player, our own timer handles it
+    if (!gameState.questionStartTime) return
+
+    const elapsed = Date.now() - gameState.questionStartTime
+    const delay = Math.max(0, 21000 - elapsed)
+
+    const t = setTimeout(() => {
+      timeoutAnswer()
+    }, delay)
+    return () => clearTimeout(t)
+  }, [gameState?.phase, gameState?.currentQuestion?.id, gameState?.currentTurn, playerName])
 
   // 150s end-of-game expiry: if both players don't restart, delete room and go home
   useEffect(() => {
