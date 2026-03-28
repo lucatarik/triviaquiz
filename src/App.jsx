@@ -53,22 +53,7 @@ export default function App() {
     setAuthState({ player: '', room: '', ready: false })
   }, [])
 
-  // Detect when the other player clicks "Torna alla home" during ended phase
-  useEffect(() => {
-    if (!gameState?.leftGame) return
-    if (gameState.leftGame === playerName) return // it was us
-    if (leftGameHandledRef.current === gameState.leftGame) return
-    leftGameHandledRef.current = gameState.leftGame
-    setLeftGameMsg(`${gameState.leftGame} non ha accettato la rivincita`)
-    // Auto-redirect after 3s
-    const t = setTimeout(() => {
-      clearUrlParams()
-      setAuthState({ player: '', room: '', ready: false })
-    }, 3000)
-    return () => clearTimeout(t)
-  }, [gameState?.leftGame, playerName])
-
-  const [leftGameMsg, setLeftGameMsg] = useState(null) // "Player X non ha accettato la rivincita"
+  const [leftGameMsg, setLeftGameMsg] = useState(null)
   const leftGameHandledRef = useRef(null)
 
   const {
@@ -89,6 +74,20 @@ export default function App() {
     leaveGame,
     restartGame,
   } = useGameState(ready ? roomId : null, ready ? playerName : null, handleRoomExpired)
+
+  // Detect when the other player clicks "Torna alla home" during ended phase
+  useEffect(() => {
+    if (!gameState?.leftGame) return
+    if (gameState.leftGame === playerName) return
+    if (leftGameHandledRef.current === gameState.leftGame) return
+    leftGameHandledRef.current = gameState.leftGame
+    setLeftGameMsg(`${gameState.leftGame} non ha accettato la rivincita`)
+    const t = setTimeout(() => {
+      clearUrlParams()
+      setAuthState({ player: '', room: '', ready: false })
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [gameState?.leftGame, playerName])
 
   // Initialize game when auth is ready
   useEffect(() => {
