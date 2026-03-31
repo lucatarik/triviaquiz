@@ -9,7 +9,7 @@ import JollyPicker from './components/JollyPicker'
 import QuestionCard from './components/QuestionCard'
 import ScoreBoard from './components/ScoreBoard'
 import { useGameState } from './hooks/useGameState'
-import { deleteGameState } from './lib/redis'
+import { deleteGameState } from './lib/firebase'
 
 function getUrlParams() {
   const params = new URLSearchParams(window.location.search)

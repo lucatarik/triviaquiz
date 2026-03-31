@@ -1,61 +1,24 @@
 import { useEffect, useRef } from 'react'
-import { getGameState } from '../lib/redis'
-
-const POLL_INTERVAL = 1500
+import { subscribeToGame } from '../lib/firebase'
 
 export function useRealtime(roomId, onUpdate, enabled = true, onExpired) {
-  const intervalRef = useRef(null)
-  const lastStateRef = useRef(null)
-  const hadStateRef = useRef(false) // true once we received at least one valid state
+  const onUpdateRef = useRef(onUpdate)
+  const onExpiredRef = useRef(onExpired)
+  useEffect(() => { onUpdateRef.current = onUpdate }, [onUpdate])
+  useEffect(() => { onExpiredRef.current = onExpired }, [onExpired])
 
   useEffect(() => {
     if (!roomId || !enabled) return
-
-    const poll = async () => {
-      try {
-        const state = await getGameState(roomId)
-        if (state) {
-          hadStateRef.current = true
-          const stateStr = JSON.stringify(state)
-          if (stateStr !== lastStateRef.current) {
-            lastStateRef.current = stateStr
-            onUpdate(state)
-          }
-        } else if (hadStateRef.current) {
-          // Room existed but is now gone (TTL expired or deleted)
-          onExpired && onExpired()
-        }
-      } catch (e) {
-        console.error('Polling error:', e)
-      }
-    }
-
-    // Initial fetch
-    poll()
-
-    // Set up interval
-    intervalRef.current = setInterval(poll, POLL_INTERVAL)
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-    }
+    const unsubscribe = subscribeToGame(
+      roomId,
+      (state) => onUpdateRef.current(state),
+      () => onExpiredRef.current && onExpiredRef.current(),
+    )
+    return unsubscribe
   }, [roomId, enabled])
 
-  const forceRefresh = async () => {
-    if (!roomId) return
-    try {
-      const state = await getGameState(roomId)
-      if (state) {
-        lastStateRef.current = JSON.stringify(state)
-        onUpdate(state)
-      }
-    } catch (e) {
-      console.error('Force refresh error:', e)
-    }
-  }
+  // Firebase listener is always live — no manual refresh needed
+  const forceRefresh = () => {}
 
   return { forceRefresh }
 }

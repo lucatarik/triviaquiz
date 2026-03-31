@@ -36,6 +36,7 @@ export default function Wheel({ onSpinComplete, onSpinStart, isMyTurn, initialAn
   const controls = useAnimation()
   const wheelRef = useRef(null)
   const observedSpinRef = useRef(null) // tracks the spinStartTime we last animated
+  const lastCategoryRef = useRef(null) // anti-repeat: tracks last landed category
 
   // Observer: play the opponent's spin animation when detected via polling
   useEffect(() => {
@@ -71,9 +72,19 @@ export default function Wheel({ onSpinComplete, onSpinStart, isMyTurn, initialAn
     setIsSpinning(true)
 
     const extraRotations = (Math.floor(Math.random() * 5) + 5) * 360
-    const randomOffset = Math.random() * 360
-    const targetAngle = currentAngle + extraRotations + randomOffset
 
+    // Anti-repeat: if first roll lands on same category as last, pick a different offset
+    const pickOffset = () => Math.random() * 360
+    let randomOffset = pickOffset()
+    let candidateNorm = ((((currentAngle + extraRotations + randomOffset) % 360) + 360) % 360)
+    let candidateIndex = Math.floor(((360 - candidateNorm + SLICE_ANGLE / 2) % 360) / SLICE_ANGLE) % SLICE_COUNT
+    if (lastCategoryRef.current !== null && CATEGORIES[candidateIndex].id === lastCategoryRef.current) {
+      // Shift by a random number of slices (1 to SLICE_COUNT-1) to guarantee a different category
+      const shift = (Math.floor(Math.random() * (SLICE_COUNT - 1)) + 1) * SLICE_ANGLE
+      randomOffset = (randomOffset + shift) % 360
+    }
+
+    const targetAngle = currentAngle + extraRotations + randomOffset
     const duration = 3.5 + Math.random() * 1.5
 
     // Broadcast spin start so the observer can play the animation too
@@ -91,13 +102,11 @@ export default function Wheel({ onSpinComplete, onSpinStart, isMyTurn, initialAn
     setIsSpinning(false)
 
     // Calculate which slice is at the top (pointer position)
-    // The pointer is at the top (0° = 12 o'clock)
     const normalizedAngle = ((targetAngle % 360) + 360) % 360
-    // Which category ended up at top pointer (180° from bottom = top)
-    // Pointer at top means we need angle that rotated to face top
     const sliceIndex = Math.floor(((360 - normalizedAngle + SLICE_ANGLE / 2) % 360) / SLICE_ANGLE) % SLICE_COUNT
     const selectedCategory = CATEGORIES[sliceIndex]
 
+    lastCategoryRef.current = selectedCategory.id
     onSpinComplete && onSpinComplete(targetAngle, selectedCategory)
   }, [isSpinning, isMyTurn, currentAngle, controls, onSpinComplete, onSpinStart])
 

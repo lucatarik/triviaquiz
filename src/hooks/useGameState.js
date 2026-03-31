@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { getGameState, setGameState, createInitialGameState, setPresence, getPresence } from '../lib/redis'
+import { getGameState, setGameState, createInitialGameState, setPresence, getPresence } from '../lib/firebase'
 import { useRealtime } from './useRealtime'
 import { CATEGORIES, getRandomQuestion } from '../data/questions'
 
