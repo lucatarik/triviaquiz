@@ -39,6 +39,7 @@ jobs:
           # Add these two secrets in: Settings > Secrets > Actions
           VITE_UPSTASH_REDIS_REST_URL: ${{ secrets.VITE_UPSTASH_REDIS_REST_URL }}
           VITE_UPSTASH_REDIS_REST_TOKEN: ${{ secrets.VITE_UPSTASH_REDIS_REST_TOKEN }}
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
         run: npm run build
 
       - name: Setup Pages
