@@ -1,7 +1,15 @@
 import { initializeApp } from 'firebase/app'
 import { getDatabase, ref, set, get, remove, onValue } from 'firebase/database'
 
-
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: "progettomlx.firebaseapp.com",
+  databaseURL: "https://progettomlx-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "progettomlx",
+  storageBucket: "progettomlx.firebasestorage.app",
+  messagingSenderId: "857416814607",
+  appId: "1:857416814607:web:7f3e81dc715f66a7eb937a",
+}
 
 const app = initializeApp(firebaseConfig)
 const db = getDatabase(app)
