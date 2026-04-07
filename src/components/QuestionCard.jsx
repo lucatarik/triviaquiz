@@ -5,9 +5,15 @@ import { CATEGORIES } from '../data/questions'
 import { useCheat } from '../hooks/useCheat'
 import CategoryMascot from './CategoryMascot'
 
-const TIMER_DURATION = 15
+const TIMER_DURATION = 25
+// Speed bonus window: first 5 seconds (timeLeft > 20)
+const SPEED_THRESHOLD = 20
 
-export default function QuestionCard({ gameState, playerName, correctCount = 0, bombsUsed = 0, onSubmitAnswer, onTimeout, onReportSelection, onUseBomb }) {
+export default function QuestionCard({
+  gameState, playerName,
+  localBombCount = 0, localSmistaCount = 0,
+  onSubmitAnswer, onTimeout, onReportSelection, onUseBomb, onUseSmista,
+}) {
   const cheatActive = useCheat()
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [timeLeft, setTimeLeft] = useState(TIMER_DURATION)
@@ -24,7 +30,6 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
     ? CATEGORIES.find(c => c.id === gameState.currentCategory)
     : null
 
-  // Opponent's pending selection (saved to Redis, polled every 1.5s)
   const opponentPending = gameState?.pendingAnswer
   const opponentSelectedIndex =
     opponentPending && opponentPending.playerName !== playerName
@@ -43,7 +48,7 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
     hasTimedOutRef.current = false
   }, [question?.id])
 
-  // Timer
+  // Timer (active player only)
   useEffect(() => {
     if (!question || hasAnswered || !isMyTurn) return
     if (hasTimedOutRef.current) return
@@ -65,20 +70,24 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
     return () => clearInterval(timerRef.current)
   }, [question?.id, hasAnswered, isMyTurn])
 
-  // Bomb lifeline — counts come from App.jsx local state to avoid Redis race conditions
-  const bombsAvailable = Math.floor(correctCount / 3) - bombsUsed
-  const bombReady = isMyTurn && bombsAvailable > 0 && !hasAnswered && eliminatedIndices.length === 0
+  // Bomb lifeline
+  const bombReady = isMyTurn && localBombCount > 0 && !hasAnswered && eliminatedIndices.length === 0
 
   const handleBomb = useCallback(() => {
     if (!bombReady || !question) return
-    // Pick 2 wrong indices at random
-    const wrongIndices = question.options
-      .map((_, i) => i)
-      .filter(i => i !== question.correct)
+    const wrongIndices = question.options.map((_, i) => i).filter(i => i !== question.correct)
     const shuffled = wrongIndices.sort(() => Math.random() - 0.5)
     setEliminatedIndices(shuffled.slice(0, 2))
     onUseBomb && onUseBomb()
   }, [bombReady, question, onUseBomb])
+
+  // Smista lifeline
+  const smistaReady = isMyTurn && localSmistaCount > 0 && !hasAnswered
+
+  const handleSmista = useCallback(() => {
+    if (!smistaReady) return
+    onUseSmista && onUseSmista()
+  }, [smistaReady, onUseSmista])
 
   const [speedBonus, setSpeedBonus] = useState(false)
 
@@ -86,17 +95,14 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
     if (!isMyTurn || hasAnswered || selectedAnswer !== null) return
     if (eliminatedIndices.includes(optionIndex)) return
     clearInterval(timerRef.current)
-    // Determine speed bonus locally for immediate feedback (timeLeft > 10 means < 5s elapsed)
-    const isSpeedBonus = timeLeft > 10
+    const isSpeedBonus = timeLeft > SPEED_THRESHOLD
     setSpeedBonus(isSpeedBonus)
     setSelectedAnswer(optionIndex)
     setHasAnswered(true)
     setShowResult(true)
 
-    // Immediately broadcast the selection so the opponent can see it
     onReportSelection && onReportSelection(optionIndex)
 
-    // Show result briefly then submit — pass the local speed bonus flag
     setTimeout(() => {
       onSubmitAnswer && onSubmitAnswer(optionIndex, isSpeedBonus)
     }, 1500)
@@ -105,7 +111,9 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
   if (!question || !category) return null
 
   const isCorrect = selectedAnswer !== null && selectedAnswer === question.correct
-  const isWrong = selectedAnswer !== null && selectedAnswer !== question.correct
+  const bonusActive = isMyTurn && timeLeft > SPEED_THRESHOLD && !hasAnswered
+  const bonusPct = Math.max(0, Math.min(100, ((timeLeft - SPEED_THRESHOLD) / 5) * 100))
+  const timerColor = timeLeft <= 5 ? '#ef4444' : timeLeft <= 10 ? '#f97316' : '#7c3aed'
 
   const getOptionStyle = (index) => {
     const isSelected = selectedAnswer === index
@@ -113,28 +121,15 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
     const cheatHighlight = cheatActive && isCorrectOption && !hasAnswered
     const isOpponentPick = opponentSelectedIndex === index
 
-    if (cheatHighlight) {
-      return 'bg-white/10 border-white shadow-[0_0_15px_rgba(255,255,255,0.9)] ring-2 ring-white'
-    }
-
-    // Eliminated by bomb — shown before answering only
-    if (!showResult && eliminatedIndices.includes(index)) {
-      return 'bg-white/3 border-white/8 opacity-30 line-through cursor-not-allowed'
-    }
-
+    if (cheatHighlight) return 'bg-white/10 border-white shadow-[0_0_15px_rgba(255,255,255,0.9)] ring-2 ring-white'
+    if (!showResult && eliminatedIndices.includes(index)) return 'bg-white/3 border-white/8 opacity-30 line-through cursor-not-allowed'
     if (!showResult) {
       if (isSelected) return 'bg-purple-600/50 border-purple-400 scale-[0.98]'
-      // Opponent has selected this option — shown only to the watcher
       if (isOpponentPick) return 'bg-orange-500/20 border-orange-400 ring-2 ring-orange-400/60'
       return 'bg-white/8 border-white/15 hover:bg-white/15 hover:border-white/30 active:scale-[0.98]'
     }
-
-    if (isCorrectOption) {
-      return 'bg-green-500/30 border-green-400 shadow-[0_0_15px_rgba(34,197,94,0.4)]'
-    }
-    if (isSelected && !isCorrectOption) {
-      return 'bg-red-500/30 border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
-    }
+    if (isCorrectOption) return 'bg-green-500/30 border-green-400 shadow-[0_0_15px_rgba(34,197,94,0.4)]'
+    if (isSelected && !isCorrectOption) return 'bg-red-500/30 border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.4)]'
     return 'bg-white/5 border-white/10 opacity-50'
   }
 
@@ -144,11 +139,6 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
     if (index === selectedAnswer && index !== question.correct) return <XCircle size={18} className="text-red-400 flex-shrink-0" />
     return null
   }
-
-  const timerColor = timeLeft <= 5 ? '#ef4444' : timeLeft <= 10 ? '#f97316' : '#7c3aed'
-  // Speed bonus window: first 5 seconds of 15
-  const bonusActive = isMyTurn && timeLeft > 10 && !hasAnswered
-  const bonusPct = Math.max(0, Math.min(100, ((timeLeft - 10) / 5) * 100))
 
   return (
     <motion.div
@@ -195,7 +185,6 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
       {/* Timer bars */}
       {isMyTurn && (
         <div className="mb-4 space-y-1.5">
-          {/* Main bar (15s) */}
           <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
             <motion.div
               className="h-full rounded-full"
@@ -204,7 +193,6 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
               transition={{ duration: 1, ease: 'linear' }}
             />
           </div>
-          {/* Speed bonus bar (first 5s window) */}
           <div className="h-1 bg-white/5 rounded-full overflow-hidden">
             <motion.div
               className="h-full rounded-full"
@@ -221,10 +209,11 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
         </div>
       )}
 
-      {/* Bomb lifeline */}
+      {/* Power-up buttons */}
       {isMyTurn && (
-        <div className="flex justify-end mb-2 min-h-[36px]">
+        <div className="flex justify-end gap-2 mb-2 min-h-[36px]">
           <AnimatePresence>
+            {/* Bomb */}
             {bombReady && (
               <motion.button
                 key="bomb"
@@ -234,7 +223,7 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
                 whileTap={{ scale: 0.88 }}
                 onClick={handleBomb}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-black border border-red-500/50 bg-red-500/15 text-red-400"
-                title="Elimina 2 risposte sbagliate"
+                title={`Elimina 2 risposte sbagliate (hai ${localBombCount})`}
               >
                 <motion.span
                   animate={{ rotate: [0, -15, 15, -10, 10, 0] }}
@@ -242,7 +231,28 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
                 >
                   💣
                 </motion.span>
-                Usa bomba
+                {localBombCount > 1 && <span className="text-xs">×{localBombCount}</span>}
+              </motion.button>
+            )}
+            {/* Smista */}
+            {smistaReady && (
+              <motion.button
+                key="smista"
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0, opacity: 0 }}
+                whileTap={{ scale: 0.88 }}
+                onClick={handleSmista}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-black border border-purple-500/50 bg-purple-500/15 text-purple-400"
+                title={`Cambia domanda (hai ${localSmistaCount})`}
+              >
+                <motion.span
+                  animate={{ rotate: [0, 180, 360] }}
+                  transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1 }}
+                >
+                  🔄
+                </motion.span>
+                {localSmistaCount > 1 && <span className="text-xs">×{localSmistaCount}</span>}
               </motion.button>
             )}
             {eliminatedIndices.length > 0 && !hasAnswered && (
@@ -252,14 +262,14 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
                 animate={{ opacity: 1 }}
                 className="text-xs text-white/30 self-center px-2 py-1.5"
               >
-                💣 Bomba usata
+                💣 usata
               </motion.span>
             )}
           </AnimatePresence>
         </div>
       )}
 
-      {/* Question card */}
+      {/* Question */}
       <motion.div
         className="glass rounded-2xl p-5 mb-4 shadow-xl"
         style={{ borderColor: category.color + '44', borderWidth: 1 }}
@@ -267,8 +277,6 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
         <p className="text-white font-semibold text-base leading-relaxed text-center">
           {question.question}
         </p>
-
-        {/* Cheat mode indicator */}
         {cheatActive && !hasAnswered && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -295,7 +303,7 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
         </motion.div>
       )}
 
-      {/* Answer options - 2x2 grid */}
+      {/* Answer options */}
       <div className="grid grid-cols-2 gap-3">
         {question.options.map((option, index) => (
           <motion.button
@@ -314,41 +322,31 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
             <div className="flex items-start justify-between gap-2">
               <span className="flex-1">{option}</span>
               {getOptionIcon(index)}
-              {/* Opponent selection indicator — visible only to the watcher */}
               {opponentSelectedIndex === index && !showResult && (
                 <motion.span
                   animate={{ opacity: [0.6, 1, 0.6], scale: [1, 1.15, 1] }}
                   transition={{ duration: 0.9, repeat: Infinity }}
                   className="text-orange-400 text-xs font-black flex-shrink-0"
-                  title={`${gameState.currentTurn} ha scelto questa`}
                 >
                   👆
                 </motion.span>
               )}
             </div>
-            <div
-              className="text-xs font-bold opacity-40 mt-1"
-              style={{ color: category.color }}
-            >
+            <div className="text-xs font-bold opacity-40 mt-1" style={{ color: category.color }}>
               {String.fromCharCode(65 + index)}
             </div>
 
-            {/* Correct answer flash overlay */}
             <AnimatePresence>
               {showResult && index === question.correct && (
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: [0, 0.3, 0] }}
-                  exit={{ opacity: 0 }}
+                  initial={{ opacity: 0 }} animate={{ opacity: [0, 0.3, 0] }} exit={{ opacity: 0 }}
                   transition={{ duration: 0.6, repeat: 2 }}
                   className="absolute inset-0 rounded-xl bg-green-400 pointer-events-none"
                 />
               )}
               {showResult && index === selectedAnswer && index !== question.correct && (
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: [0, 0.3, 0] }}
-                  exit={{ opacity: 0 }}
+                  initial={{ opacity: 0 }} animate={{ opacity: [0, 0.3, 0] }} exit={{ opacity: 0 }}
                   transition={{ duration: 0.6, repeat: 2 }}
                   className="absolute inset-0 rounded-xl bg-red-400 pointer-events-none"
                 />
@@ -373,10 +371,8 @@ export default function QuestionCard({ gameState, playerName, correctCount = 0, 
             }`}
           >
             {isCorrect
-              ? speedBonus
-                ? '⚡ VELOCE! +2 punti!'
-                : '✅ Risposta corretta! +1 punto'
-              : `❌ Risposta sbagliata! La corretta era: "${question.options[question.correct]}"`}
+              ? speedBonus ? '⚡ VELOCE! +2 punti!' : '✅ Risposta corretta! +1 punto'
+              : `❌ Sbagliata! La corretta era: "${question.options[question.correct]}"`}
           </motion.div>
         )}
       </AnimatePresence>

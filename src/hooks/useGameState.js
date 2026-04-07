@@ -3,17 +3,31 @@ import { getGameState, setGameState, createInitialGameState, setPresence, getPre
 import { useRealtime } from './useRealtime'
 import { CATEGORIES, getRandomQuestion } from '../data/questions'
 
-const PRESENCE_STALE_MS = 25000  // player considered disconnected after 25s without heartbeat
+const PRESENCE_STALE_MS = 25000
+
+// Shuffle a question's options and update the correct index accordingly.
+// Called before storing in Firebase so both players see the same order.
+function shuffleQuestion(question) {
+  const indices = [0, 1, 2, 3]
+  for (let i = 3; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[indices[i], indices[j]] = [indices[j], indices[i]]
+  }
+  return {
+    ...question,
+    options: indices.map(i => question.options[i]),
+    correct: indices.indexOf(question.correct),
+  }
+}
 
 export function useGameState(roomId, playerName, onRoomExpired) {
   const [gameState, setLocalGameState] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const isActingRef = useRef(false)
-  // Local-only bomb counters — never stored in Redis to avoid race conditions
-  // (any opponent write spreads gameState, which can overwrite a freshly-updated count)
-  const [localCorrectCount, setLocalCorrectCount] = useState(0)
-  const [localBombsUsed, setLocalBombsUsed] = useState(0)
+  // Power-up counts — local only, never stored in Firebase (avoids race conditions)
+  const [localBombCount, setLocalBombCount] = useState(0)
+  const [localSmistaCount, setLocalSmistaCount] = useState(0)
 
   const handleStateUpdate = useCallback((newState) => {
     setLocalGameState(newState)
@@ -42,7 +56,6 @@ export function useGameState(roomId, playerName, onRoomExpired) {
         const existingNames = Object.keys(state.players)
 
         if (existingNames.length >= 2) {
-          // Room is full — check if one of the existing players has gone offline
           const presences = await Promise.all(
             existingNames.map(n => getPresence(roomId, n).then(ts => ({ name: n, ts })))
           )
@@ -52,13 +65,11 @@ export function useGameState(roomId, playerName, onRoomExpired) {
             .sort((a, b) => (a.ts || 0) - (b.ts || 0))[0]
 
           if (!disconnected) {
-            // Both players are active — can't join
             setError('La stanza è piena. Entrambi i giocatori sono connessi.')
             setLoading(false)
             return
           }
 
-          // Take over the disconnected player's slot
           const oldName = disconnected.name
           const oldData = state.players[oldName]
           const newPlayers = { ...state.players }
@@ -73,12 +84,11 @@ export function useGameState(roomId, playerName, onRoomExpired) {
             pendingAnswer: null,
           }
         } else {
-          // Second player joining normally
           state = {
             ...state,
             players: {
               ...state.players,
-              [playerName]: { score: 0, connected: true, joinedAt: Date.now(), correctCount: 0, bombsUsed: 0 }
+              [playerName]: { score: 0, connected: true, joinedAt: Date.now() }
             },
             phase: existingNames.length === 1 ? 'spinning' : state.phase,
             answerResult: null,
@@ -87,7 +97,6 @@ export function useGameState(roomId, playerName, onRoomExpired) {
         }
         await setGameState(roomId, state)
       } else {
-        // Reconnecting player
         state = {
           ...state,
           players: {
@@ -105,8 +114,6 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     }
   }, [roomId, playerName])
 
-  // Called at the START of the spin so the observer can see the animation
-  // Not guarded by isActingRef — lightweight fire-and-forget
   const broadcastSpinStart = useCallback(async (targetAngle, duration) => {
     if (!gameState || gameState.currentTurn !== playerName) return
     const updated = {
@@ -119,36 +126,79 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     await setGameState(roomId, updated)
   }, [gameState, playerName, roomId])
 
-  const spinWheel = useCallback(async (targetAngle, selectedCategoryFromWheel) => {
+  const spinWheel = useCallback(async (targetAngle, selectedSlice) => {
     if (!gameState || isActingRef.current) return
     if (gameState.currentTurn !== playerName) return
     isActingRef.current = true
 
     try {
-      let selectedCategory = selectedCategoryFromWheel
-      if (!selectedCategory) {
-        const sliceSize = 360 / CATEGORIES.length
-        const normalizedAngle = ((targetAngle % 360) + 360) % 360
-        const categoryIndex =
-          Math.floor(((360 - normalizedAngle + sliceSize / 2) % 360) / sliceSize) % CATEGORIES.length
-        selectedCategory = CATEGORIES[categoryIndex]
-      }
-
-      const nextPhase = selectedCategory.isJolly ? 'jolly_pick' : 'category_confirm'
-
-      const updated = {
+      const allPlayers = Object.keys(gameState.players)
+      const currentIndex = allPlayers.indexOf(playerName)
+      const nextPlayer = allPlayers[(currentIndex + 1) % allPlayers.length]
+      const spinBase = {
         ...gameState,
-        phase: nextPhase,
         wheelAngle: targetAngle,
-        currentCategory: selectedCategory.isJolly ? null : selectedCategory.id,
-        pendingCategory: selectedCategory.isJolly ? null : selectedCategory,
         isSpinning: false,
         spinTargetAngle: null,
         spinDuration: null,
         spinStartTime: null,
       }
-      await setGameState(roomId, updated)
-      setLocalGameState(updated)
+
+      if (!selectedSlice || selectedSlice.type === 'category') {
+        // Legacy path or category: show category confirm
+        let category = selectedSlice
+        if (!category) {
+          const sliceSize = 360 / CATEGORIES.length
+          const norm = ((targetAngle % 360) + 360) % 360
+          const idx = Math.floor(((360 - norm + sliceSize / 2) % 360) / sliceSize) % CATEGORIES.length
+          category = CATEGORIES[idx]
+        }
+        const nextPhase = category.isJolly ? 'jolly_pick' : 'category_confirm'
+        const updated = {
+          ...spinBase,
+          phase: nextPhase,
+          currentCategory: category.isJolly ? null : category.id,
+          pendingCategory: category.isJolly ? null : category,
+        }
+        await setGameState(roomId, updated)
+        setLocalGameState(updated)
+
+      } else if (selectedSlice.type === 'passa_turno') {
+        const updated = {
+          ...spinBase,
+          phase: 'spinning',
+          currentTurn: nextPlayer,
+          answerResult: { playerName, passaTurno: true, timestamp: Date.now() },
+        }
+        await setGameState(roomId, updated)
+        setLocalGameState(updated)
+
+      } else if (selectedSlice.type === 'powerup') {
+        if (selectedSlice.powerupType === 'bomb') setLocalBombCount(prev => prev + 1)
+        else if (selectedSlice.powerupType === 'smista') setLocalSmistaCount(prev => prev + 1)
+        const updated = {
+          ...spinBase,
+          phase: 'spinning',
+          currentTurn: nextPlayer,
+          answerResult: { playerName, powerup: selectedSlice.powerupType, timestamp: Date.now() },
+        }
+        await setGameState(roomId, updated)
+        setLocalGameState(updated)
+
+      } else if (selectedSlice.type === 'minus_punto') {
+        const players = { ...gameState.players }
+        const prev = players[playerName] || {}
+        players[playerName] = { ...prev, score: (prev.score || 0) - 1 }
+        const updated = {
+          ...spinBase,
+          phase: 'spinning',
+          players,
+          currentTurn: nextPlayer,
+          answerResult: { playerName, minusPunto: true, timestamp: Date.now() },
+        }
+        await setGameState(roomId, updated)
+        setLocalGameState(updated)
+      }
     } finally {
       isActingRef.current = false
     }
@@ -163,13 +213,12 @@ export function useGameState(roomId, playerName, onRoomExpired) {
       const categoryId = gameState.currentCategory
       const usedIds = gameState.usedQuestions?.[categoryId] || []
       const question = getRandomQuestion(categoryId, usedIds)
-
       if (!question) return
 
       const updated = {
         ...gameState,
         phase: 'question',
-        currentQuestion: question,
+        currentQuestion: shuffleQuestion(question),
         questionStartTime: Date.now(),
         answerResult: null,
       }
@@ -203,8 +252,6 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     }
   }, [gameState, playerName, roomId])
 
-  // Saves the option the active player just tapped — visible to the opponent via polling.
-  // Intentionally NOT guarded by isActingRef (lightweight, fire-and-forget).
   const reportPendingAnswer = useCallback(async (optionIndex) => {
     if (!gameState || gameState.currentTurn !== playerName) return
     if (gameState.phase !== 'question') return
@@ -216,10 +263,6 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     setLocalGameState(updated)
   }, [gameState, playerName, roomId])
 
-  // clientSpeedBonus is passed from QuestionCard based on the local countdown timer
-  // (timeLeft > 10 means answered within the first 5 seconds as seen on screen).
-  // We do NOT use Date.now() - questionStartTime here because that timestamp is set
-  // in Redis and the polling delay (~1.5 s) would eat into the bonus window unfairly.
   const submitAnswer = useCallback(async (selectedIndex, clientSpeedBonus = false) => {
     if (!gameState || isActingRef.current) return
     if (gameState.currentTurn !== playerName) return
@@ -235,25 +278,21 @@ export function useGameState(roomId, playerName, onRoomExpired) {
 
       const players = { ...gameState.players }
       const prevPlayer = players[playerName] || {}
-      if (isCorrect) setLocalCorrectCount(prev => prev + 1)
       players[playerName] = {
         ...prevPlayer,
         score: (prevPlayer.score || 0) + pointsEarned,
       }
 
-      // Track used questions
       const categoryId = gameState.currentCategory
       const usedQuestions = {
         ...gameState.usedQuestions,
         [categoryId]: [...(gameState.usedQuestions?.[categoryId] || []), question.id]
       }
 
-      // Determine next turn
       const allPlayers = Object.keys(gameState.players)
       const currentIndex = allPlayers.indexOf(playerName)
       const nextPlayer = allPlayers[(currentIndex + 1) % allPlayers.length]
 
-      // Check win condition (first to 10 points)
       const newScore = players[playerName].score
       const phase = newScore >= 10 ? 'ended' : 'spinning'
 
@@ -286,7 +325,6 @@ export function useGameState(roomId, playerName, onRoomExpired) {
       await setGameState(roomId, updated)
       setLocalGameState(updated)
 
-      // Haptic feedback
       if (navigator.vibrate) {
         if (isCorrect) navigator.vibrate(100)
         else navigator.vibrate([100, 50, 100])
@@ -296,7 +334,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     }
   }, [gameState, playerName, roomId])
 
-  const timeoutAnswer = useCallback(async (callerName) => {
+  const timeoutAnswer = useCallback(async () => {
     if (!gameState || isActingRef.current) return
     if (gameState.phase !== 'question') return
     isActingRef.current = true
@@ -326,6 +364,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
           playerName: gameState.currentTurn,
           selectedIndex: -1,
           correct: question.correct,
+          correctOption: question.options[question.correct],
           isCorrect: false,
           timedOut: true,
           timestamp: Date.now(),
@@ -340,21 +379,52 @@ export function useGameState(roomId, playerName, onRoomExpired) {
   }, [gameState, roomId])
 
   const useBomb = useCallback(() => {
-    setLocalBombsUsed(prev => prev + 1)
+    setLocalBombCount(prev => Math.max(0, prev - 1))
   }, [])
+
+  const useSmista = useCallback(async () => {
+    if (!gameState || isActingRef.current) return
+    if (gameState.phase !== 'question') return
+    if (gameState.currentTurn !== playerName) return
+    if (localSmistaCount <= 0) return
+    isActingRef.current = true
+
+    try {
+      const categoryId = gameState.currentCategory
+      // Mark current question as used so it doesn't come back
+      const usedIds = [...(gameState.usedQuestions?.[categoryId] || []), gameState.currentQuestion.id]
+      const newQuestion = getRandomQuestion(categoryId, usedIds)
+      if (!newQuestion) return // no more questions in this category
+
+      setLocalSmistaCount(prev => prev - 1)
+
+      const updated = {
+        ...gameState,
+        currentQuestion: shuffleQuestion(newQuestion),
+        questionStartTime: Date.now(),
+        pendingAnswer: null,
+        usedQuestions: {
+          ...gameState.usedQuestions,
+          [categoryId]: usedIds,
+        },
+      }
+      await setGameState(roomId, updated)
+      setLocalGameState(updated)
+    } finally {
+      isActingRef.current = false
+    }
+  }, [gameState, playerName, roomId, localSmistaCount])
 
   const restartGame = useCallback(async () => {
     if (!gameState) return
-    // Re-fetch fresh state to avoid stale readyToRestart
     const current = (await getGameState(roomId)) || gameState
     const readyToRestart = [...new Set([...(current.readyToRestart || []), playerName])]
     const allPlayers = Object.keys(current.players)
 
     if (readyToRestart.length >= allPlayers.length) {
-      // Both voted — do the actual restart
       const newPlayers = {}
       allPlayers.forEach(name => {
-        newPlayers[name] = { score: 0, connected: true, joinedAt: Date.now(), correctCount: 0, bombsUsed: 0 }
+        newPlayers[name] = { score: 0, connected: true, joinedAt: Date.now() }
       })
       const updated = {
         ...current,
@@ -372,12 +442,11 @@ export function useGameState(roomId, playerName, onRoomExpired) {
         readyToRestart: [],
         leftGame: null,
       }
-      setLocalCorrectCount(0)
-      setLocalBombsUsed(0)
+      setLocalBombCount(0)
+      setLocalSmistaCount(0)
       await setGameState(roomId, updated)
       setLocalGameState(updated)
     } else {
-      // Just register this player's vote
       const updated = { ...current, readyToRestart }
       await setGameState(roomId, updated)
       setLocalGameState(updated)
@@ -394,8 +463,8 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     gameState,
     loading,
     error,
-    localCorrectCount,
-    localBombsUsed,
+    localBombCount,
+    localSmistaCount,
     initializeGame,
     broadcastSpinStart,
     spinWheel,
@@ -405,6 +474,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
     submitAnswer,
     timeoutAnswer,
     useBomb,
+    useSmista,
     leaveGame,
     restartGame,
     forceRefresh,

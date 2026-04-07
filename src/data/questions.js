@@ -14,6 +14,27 @@ export const CATEGORIES = [
 // Only the real question categories (excludes jolly)
 export const QUESTION_CATEGORIES = CATEGORIES.filter(c => !c.isJolly)
 
+// Wheel slices with variable angles (must sum to 360°).
+// Layout interleaves categories with special slices.
+export const WHEEL_SLICES = [
+  { id: 'storia',          type: 'category',    label: 'Storia',          emoji: '📜', color: '#F59E0B', angle: 25 },
+  { id: 'passa_turno_1',   type: 'passa_turno', label: 'Passa',           emoji: '⏭️', color: '#6B7280', angle: 24 },
+  { id: 'scienza',         type: 'category',    label: 'Scienza',         emoji: '🔬', color: '#10B981', angle: 25 },
+  { id: 'powerup_bomb',    type: 'powerup',     powerupType: 'bomb',      label: 'Bomba',  emoji: '💣', color: '#7F1D1D', angle: 24 },
+  { id: 'arte',            type: 'category',    label: 'Arte',            emoji: '🎨', color: '#EF4444', angle: 25 },
+  { id: 'passa_turno_2',   type: 'passa_turno', label: 'Passa',           emoji: '⏭️', color: '#4B5563', angle: 24 },
+  { id: 'sport',           type: 'category',    label: 'Sport',           emoji: '⚽', color: '#F97316', angle: 25 },
+  { id: 'powerup_smista',  type: 'powerup',     powerupType: 'smista',    label: 'Smista', emoji: '🔄', color: '#4C1D95', angle: 24 },
+  { id: 'geografia',       type: 'category',    label: 'Geografia',       emoji: '🌍', color: '#3B82F6', angle: 25 },
+  { id: 'passa_turno_3',   type: 'passa_turno', label: 'Passa',           emoji: '⏭️', color: '#374151', angle: 24 },
+  { id: 'intrattenimento', type: 'category',    label: 'Intr.',           emoji: '🎬', color: '#EC4899', angle: 25 },
+  { id: 'minus_punto',     type: 'minus_punto', label: '-1',              emoji: '💀', color: '#111827', angle: 15 },
+  { id: 'tecnologia',      type: 'category',    label: 'Tech',            emoji: '💻', color: '#06B6D4', angle: 25 },
+  { id: 'news',            type: 'category',    label: 'News',            emoji: '📰', color: '#8B5CF6', angle: 25 },
+  { id: 'geopolitica',     type: 'category',    label: 'Geo.',            emoji: '🗺️',color: '#374151', angle: 25 },
+]
+// Verify: 9*25 + 3*24 + 2*24 + 15 = 225 + 72 + 48 + 15 = 360 ✓
+
 export const QUESTIONS = {
   storia: [
     { id: 'st1',  question: "In che anno cadde l'Impero Romano d'Occidente?", options: ['376 d.C.', '476 d.C.', '576 d.C.', '276 d.C.'], correct: 1 },

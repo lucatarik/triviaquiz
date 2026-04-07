@@ -60,8 +60,8 @@ export default function App() {
     gameState,
     loading,
     error,
-    localCorrectCount,
-    localBombsUsed,
+    localBombCount,
+    localSmistaCount,
     initializeGame,
     broadcastSpinStart,
     spinWheel,
@@ -71,6 +71,7 @@ export default function App() {
     submitAnswer,
     timeoutAnswer,
     useBomb,
+    useSmista,
     leaveGame,
     restartGame,
   } = useGameState(ready ? roomId : null, ready ? playerName : null, handleRoomExpired)
@@ -117,7 +118,7 @@ export default function App() {
     if (!gameState.questionStartTime) return
 
     const elapsed = Date.now() - gameState.questionStartTime
-    const delay = Math.max(0, 21000 - elapsed)
+    const delay = Math.max(0, 28000 - elapsed)
 
     const t = setTimeout(() => {
       timeoutAnswer()
@@ -157,7 +158,7 @@ export default function App() {
     if (!gameState) return
 
     if (gameState.phase === 'question' && gameState.currentTurn === playerName) {
-      setTimeLeft(15)
+      setTimeLeft(25)
       setTimerActive(true)
     } else {
       setTimeLeft(null)
@@ -196,8 +197,8 @@ export default function App() {
     broadcastSpinStart(angle, duration)
   }, [broadcastSpinStart])
 
-  const handleSpinComplete = useCallback((angle, selectedCategory) => {
-    spinWheel(angle, selectedCategory)
+  const handleSpinComplete = useCallback((angle, selectedSlice) => {
+    spinWheel(angle, selectedSlice)
   }, [spinWheel])
 
   const handleSubmitAnswer = useCallback(async (index, speedBonus) => {
@@ -209,6 +210,10 @@ export default function App() {
     setTimerActive(false)
     await timeoutAnswer()
   }, [timeoutAnswer])
+
+  const handleSmista = useCallback(async () => {
+    await useSmista()
+  }, [useSmista])
 
   const handleRestart = useCallback(async () => {
     await restartGame()
@@ -351,7 +356,23 @@ export default function App() {
                     animate={{ opacity: 1, y: 0 }}
                     className="w-full max-w-sm px-3"
                   >
-                    {r.timedOut ? (
+                    {r.passaTurno ? (
+                      <div className="rounded-xl p-3 text-center text-sm font-semibold border bg-gray-500/15 border-gray-500/30 text-gray-300">
+                        ⏭️ <strong>{r.playerName}</strong> ha saltato il turno!
+                      </div>
+                    ) : r.powerup === 'bomb' ? (
+                      <div className="rounded-xl p-3 text-center text-sm font-semibold border bg-red-900/20 border-red-700/30 text-red-300">
+                        💣 <strong>{r.playerName}</strong> ha ottenuto una Bomba!
+                      </div>
+                    ) : r.powerup === 'smista' ? (
+                      <div className="rounded-xl p-3 text-center text-sm font-semibold border bg-purple-900/20 border-purple-700/30 text-purple-300">
+                        🔄 <strong>{r.playerName}</strong> ha ottenuto uno Smista!
+                      </div>
+                    ) : r.minusPunto ? (
+                      <div className="rounded-xl p-3 text-center text-sm font-semibold border bg-gray-900/30 border-gray-700/30 text-gray-400">
+                        💀 <strong>{r.playerName}</strong> perde 1 punto!
+                      </div>
+                    ) : r.timedOut ? (
                       <div className="rounded-xl p-3 text-center text-sm font-semibold border bg-orange-500/15 border-orange-500/30 text-orange-400">
                         ⏰ Tempo scaduto per <strong>{r.playerName}</strong>!
                         {r.correctOption && (
@@ -364,15 +385,11 @@ export default function App() {
                       <div className="rounded-xl p-3 text-center text-sm font-semibold border bg-green-500/15 border-green-500/30 text-green-400">
                         {r.speedBonus ? '⚡' : '✅'} <strong>{r.playerName}</strong>
                         {r.speedBonus ? ' risposta fulminea! +2 punti!' : ' risposta corretta! +1 punto'}
-                        <div className="mt-1 text-xs text-green-300/70 font-normal">
-                          "{r.correctOption}"
-                        </div>
+                        <div className="mt-1 text-xs text-green-300/70 font-normal">"{r.correctOption}"</div>
                       </div>
                     ) : (
                       <div className="rounded-xl p-3 text-sm font-semibold border bg-red-500/15 border-red-500/30 space-y-1">
-                        <div className="text-red-400 text-center">
-                          ❌ <strong>{r.playerName}</strong> ha sbagliato
-                        </div>
+                        <div className="text-red-400 text-center">❌ <strong>{r.playerName}</strong> ha sbagliato</div>
                         <div className="flex items-start gap-2 text-xs font-normal mt-1">
                           <span className="text-red-400/80 shrink-0">Scelta:</span>
                           <span className="text-white/60 line-through">"{r.selectedOption}"</span>
@@ -401,12 +418,13 @@ export default function App() {
               <QuestionCard
                 gameState={gameState}
                 playerName={playerName}
-                correctCount={localCorrectCount}
-                bombsUsed={localBombsUsed}
+                localBombCount={localBombCount}
+                localSmistaCount={localSmistaCount}
                 onSubmitAnswer={handleSubmitAnswer}
                 onTimeout={handleTimeout}
                 onReportSelection={reportPendingAnswer}
                 onUseBomb={useBomb}
+                onUseSmista={handleSmista}
               />
             </motion.div>
           )}
