@@ -294,14 +294,37 @@ export default function ScoreBoard({ gameState, playerName, onRestart, onHome, e
           </motion.button>
 
           {historyUrl && (
-            <motion.button
-              onClick={copyHistoryLink}
-              whileTap={{ scale: 0.97 }}
-              className="w-full py-3 rounded-2xl font-semibold text-purple-300 text-sm flex items-center justify-center gap-2 bg-purple-500/10 border border-purple-500/25 hover:bg-purple-500/20 transition-all"
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="rounded-2xl border border-purple-500/40 bg-purple-500/10 overflow-hidden"
             >
-              {copiedHistory ? <Check size={16} className="text-green-400" /> : <History size={16} />}
-              {copiedHistory ? 'Link cronologia copiato!' : 'Copia link cronologia partita'}
-            </motion.button>
+              <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+                <History size={15} className="text-purple-400 flex-shrink-0" />
+                <span className="text-purple-300 font-bold text-sm">Cronologia partita</span>
+              </div>
+              <div className="flex gap-2 px-3 pb-3 pt-1">
+                <a
+                  href={historyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 py-2.5 rounded-xl font-bold text-white text-sm flex items-center justify-center gap-1.5 text-center"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #a855f7)' }}
+                >
+                  <History size={14} />
+                  Apri cronologia
+                </a>
+                <motion.button
+                  onClick={copyHistoryLink}
+                  whileTap={{ scale: 0.93 }}
+                  className="px-3 py-2.5 rounded-xl text-sm font-bold border border-purple-500/40 bg-purple-500/15 text-purple-300"
+                  title="Copia link"
+                >
+                  {copiedHistory ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
+                </motion.button>
+              </div>
+            </motion.div>
           )}
         </div>
       </motion.div>
