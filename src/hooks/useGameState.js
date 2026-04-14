@@ -36,6 +36,22 @@ export function useGameState(roomId, playerName, onRoomExpired) {
 
   const { forceRefresh } = useRealtime(roomId, handleStateUpdate, !!roomId, onRoomExpired)
 
+  // Polling fallback while waiting for the second player to join
+  useEffect(() => {
+    if (!roomId) return
+    const playerCount = gameState ? Object.keys(gameState.players || {}).length : 0
+    if (playerCount >= 2) return
+    const interval = setInterval(async () => {
+      try {
+        const state = await getGameState(roomId)
+        if (state && Object.keys(state.players || {}).length >= 2) {
+          setLocalGameState(state)
+        }
+      } catch {}
+    }, 2000)
+    return () => clearInterval(interval)
+  }, [roomId, gameState ? Object.keys(gameState.players || {}).length : 0])
+
   // Heartbeat: write presence every 10s so the other player can detect disconnection
   useEffect(() => {
     if (!roomId || !playerName) return
@@ -176,10 +192,11 @@ export function useGameState(roomId, playerName, onRoomExpired) {
       } else if (selectedSlice.type === 'powerup') {
         if (selectedSlice.powerupType === 'bomb') setLocalBombCount(prev => prev + 1)
         else if (selectedSlice.powerupType === 'smista') setLocalSmistaCount(prev => prev + 1)
+        // Keep same player's turn — they spin again to pick a category
         const updated = {
           ...spinBase,
           phase: 'spinning',
-          currentTurn: nextPlayer,
+          currentTurn: playerName,
           answerResult: { playerName, powerup: selectedSlice.powerupType, timestamp: Date.now() },
         }
         await setGameState(roomId, updated)

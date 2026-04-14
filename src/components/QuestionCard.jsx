@@ -5,9 +5,9 @@ import { CATEGORIES } from '../data/questions'
 import { useCheat } from '../hooks/useCheat'
 import CategoryMascot from './CategoryMascot'
 
-const TIMER_DURATION = 25
-// Speed bonus window: first 5 seconds (timeLeft > 20)
-const SPEED_THRESHOLD = 20
+const TIMER_DURATION = 30
+// Speed bonus window: first 5 seconds (timeLeft > 25)
+const SPEED_THRESHOLD = 25
 
 export default function QuestionCard({
   gameState, playerName,

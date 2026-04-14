@@ -118,7 +118,7 @@ export default function App() {
     if (!gameState.questionStartTime) return
 
     const elapsed = Date.now() - gameState.questionStartTime
-    const delay = Math.max(0, 28000 - elapsed)
+    const delay = Math.max(0, 33000 - elapsed)
 
     const t = setTimeout(() => {
       timeoutAnswer()
@@ -158,7 +158,7 @@ export default function App() {
     if (!gameState) return
 
     if (gameState.phase === 'question' && gameState.currentTurn === playerName) {
-      setTimeLeft(25)
+      setTimeLeft(30)
       setTimerActive(true)
     } else {
       setTimeLeft(null)

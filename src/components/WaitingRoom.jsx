@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Copy, Check, Users, Loader2 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 
 export default function WaitingRoom({ playerName, roomId }) {
   const [copied, setCopied] = useState(false)
@@ -99,6 +100,16 @@ export default function WaitingRoom({ playerName, roomId }) {
             <p className="text-white/30 text-xs mt-2">Tocca per copiare il codice</p>
           </div>
 
+          {/* QR Code */}
+          <div className="mb-5">
+            <p className="text-white/40 text-xs mb-3 uppercase tracking-wider font-semibold">Scansiona per entrare</p>
+            <div className="flex justify-center">
+              <div className="p-3 bg-white rounded-2xl inline-block">
+                <QRCodeSVG value={shareUrl} size={140} level="M" />
+              </div>
+            </div>
+          </div>
+
           {/* Share URL */}
           <motion.button
             onClick={copyToClipboard}
@@ -128,7 +139,7 @@ export default function WaitingRoom({ playerName, roomId }) {
           {/* Loading indicator */}
           <div className="mt-5 flex items-center justify-center gap-2 text-white/30">
             <Loader2 size={14} className="animate-spin" />
-            <span className="text-xs">Aggiornamento automatico ogni 1.5s</span>
+            <span className="text-xs">In attesa in tempo reale...</span>
           </div>
         </div>
       </motion.div>
