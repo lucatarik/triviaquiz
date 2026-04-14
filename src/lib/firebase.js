@@ -63,6 +63,15 @@ export function subscribeToGame(roomId, callback, onExpired) {
   return unsubscribe
 }
 
+export async function saveHistory(roomId, data) {
+  await set(ref(db, `history/${roomId}`), { ...data, savedAt: Date.now() })
+}
+
+export async function getHistory(historyId) {
+  const snap = await get(ref(db, `history/${historyId}`))
+  return snap.val()
+}
+
 export function createInitialGameState(roomId, playerName) {
   return {
     roomId,

@@ -1,9 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { getGameState, setGameState, createInitialGameState, setPresence, getPresence } from '../lib/firebase'
+import { getGameState, setGameState, createInitialGameState, setPresence, getPresence, saveHistory } from '../lib/firebase'
 import { useRealtime } from './useRealtime'
 import { CATEGORIES, getRandomQuestion } from '../data/questions'
 
 const PRESENCE_STALE_MS = 25000
+
+// Append an event to the events log (immutable)
+function appendEvent(events, event) {
+  return [...(events || []), { ...event, ts: Date.now() }]
+}
 
 // Shuffle a question's options and update the correct index accordingly.
 // Called before storing in Firebase so both players see the same order.
@@ -160,6 +165,8 @@ export function useGameState(roomId, playerName, onRoomExpired) {
         spinStartTime: null,
       }
 
+      const spinEvent = { type: 'spin', player: playerName, slice: selectedSlice ? { type: selectedSlice.type, label: selectedSlice.label, emoji: selectedSlice.emoji, powerupType: selectedSlice.powerupType || null } : null }
+
       if (!selectedSlice || selectedSlice.type === 'category') {
         // Legacy path or category: show category confirm
         let category = selectedSlice
@@ -175,6 +182,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
           phase: nextPhase,
           currentCategory: category.isJolly ? null : category.id,
           pendingCategory: category.isJolly ? null : category,
+          events: appendEvent(spinBase.events, spinEvent),
         }
         await setGameState(roomId, updated)
         setLocalGameState(updated)
@@ -185,6 +193,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
           phase: 'spinning',
           currentTurn: nextPlayer,
           answerResult: { playerName, passaTurno: true, timestamp: Date.now() },
+          events: appendEvent(spinBase.events, spinEvent),
         }
         await setGameState(roomId, updated)
         setLocalGameState(updated)
@@ -198,6 +207,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
           phase: 'spinning',
           currentTurn: playerName,
           answerResult: { playerName, powerup: selectedSlice.powerupType, timestamp: Date.now() },
+          events: appendEvent(spinBase.events, spinEvent),
         }
         await setGameState(roomId, updated)
         setLocalGameState(updated)
@@ -212,6 +222,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
           players,
           currentTurn: nextPlayer,
           answerResult: { playerName, minusPunto: true, timestamp: Date.now() },
+          events: appendEvent(spinBase.events, spinEvent),
         }
         await setGameState(roomId, updated)
         setLocalGameState(updated)
@@ -313,6 +324,20 @@ export function useGameState(roomId, playerName, onRoomExpired) {
       const newScore = players[playerName].score
       const phase = newScore >= 10 ? 'ended' : 'spinning'
 
+      const answerEvent = {
+        type: 'answer',
+        player: playerName,
+        category: categoryId,
+        question: question.question,
+        options: question.options,
+        selectedIndex,
+        correctIndex: question.correct,
+        isCorrect,
+        speedBonus,
+        pointsEarned,
+      }
+      const updatedEvents = appendEvent(gameState.events, answerEvent)
+
       const updated = {
         ...gameState,
         players,
@@ -337,10 +362,15 @@ export function useGameState(roomId, playerName, onRoomExpired) {
           timestamp: Date.now(),
         },
         winner: phase === 'ended' ? playerName : null,
+        events: updatedEvents,
       }
 
       await setGameState(roomId, updated)
       setLocalGameState(updated)
+
+      if (phase === 'ended') {
+        saveHistory(roomId, { ...updated, historyId: roomId }).catch(() => {})
+      }
 
       if (navigator.vibrate) {
         if (isCorrect) navigator.vibrate(100)
@@ -368,6 +398,15 @@ export function useGameState(roomId, playerName, onRoomExpired) {
         [categoryId]: [...(gameState.usedQuestions?.[categoryId] || []), question.id]
       }
 
+      const timeoutEvent = {
+        type: 'timeout',
+        player: gameState.currentTurn,
+        category: categoryId,
+        question: question.question,
+        options: question.options,
+        correctIndex: question.correct,
+      }
+
       const updated = {
         ...gameState,
         phase: 'spinning',
@@ -386,6 +425,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
           timedOut: true,
           timestamp: Date.now(),
         },
+        events: appendEvent(gameState.events, timeoutEvent),
       }
 
       await setGameState(roomId, updated)
@@ -397,6 +437,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
 
   const useBomb = useCallback(() => {
     setLocalBombCount(prev => Math.max(0, prev - 1))
+    // Note: bomb effect is local-only (eliminates options on screen), no Firebase write needed
   }, [])
 
   const useSmista = useCallback(async () => {
@@ -415,6 +456,8 @@ export function useGameState(roomId, playerName, onRoomExpired) {
 
       setLocalSmistaCount(prev => prev - 1)
 
+      const smistaEvent = { type: 'smista_used', player: playerName, category: categoryId, skippedQuestion: gameState.currentQuestion.question }
+
       const updated = {
         ...gameState,
         currentQuestion: shuffleQuestion(newQuestion),
@@ -424,6 +467,7 @@ export function useGameState(roomId, playerName, onRoomExpired) {
           ...gameState.usedQuestions,
           [categoryId]: usedIds,
         },
+        events: appendEvent(gameState.events, smistaEvent),
       }
       await setGameState(roomId, updated)
       setLocalGameState(updated)

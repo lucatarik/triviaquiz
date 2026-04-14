@@ -1,8 +1,9 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trophy, Star, RefreshCw, Home, Clock } from 'lucide-react'
+import { Trophy, Star, RefreshCw, Home, Clock, Copy, Check, History } from 'lucide-react'
 
 export default function ScoreBoard({ gameState, playerName, onRestart, onHome, endTimeLeft }) {
+  const [copiedHistory, setCopiedHistory] = useState(false)
   if (!gameState) return null
 
   const players = Object.entries(gameState.players).sort(([, a], [, b]) => (b.score || 0) - (a.score || 0))
@@ -16,6 +17,16 @@ export default function ScoreBoard({ gameState, playerName, onRestart, onHome, e
   const opponentHasVoted = otherPlayers.some(n => readyToRestart.includes(n))
 
   const medals = ['🥇', '🥈', '🥉']
+  const historyUrl = gameState?.roomId
+    ? `${window.location.origin}${window.location.pathname}?history=${gameState.roomId}`
+    : null
+
+  const copyHistoryLink = async () => {
+    if (!historyUrl) return
+    try { await navigator.clipboard.writeText(historyUrl) } catch {}
+    setCopiedHistory(true)
+    setTimeout(() => setCopiedHistory(false), 2500)
+  }
 
   const timerColor = endTimeLeft !== null && endTimeLeft <= 30 ? '#ef4444' : '#a78bfa'
   const timerPct = endTimeLeft !== null ? (endTimeLeft / 150) * 100 : 100
@@ -281,6 +292,17 @@ export default function ScoreBoard({ gameState, playerName, onRestart, onHome, e
             <Home size={16} />
             Torna alla home
           </motion.button>
+
+          {historyUrl && (
+            <motion.button
+              onClick={copyHistoryLink}
+              whileTap={{ scale: 0.97 }}
+              className="w-full py-3 rounded-2xl font-semibold text-purple-300 text-sm flex items-center justify-center gap-2 bg-purple-500/10 border border-purple-500/25 hover:bg-purple-500/20 transition-all"
+            >
+              {copiedHistory ? <Check size={16} className="text-green-400" /> : <History size={16} />}
+              {copiedHistory ? 'Link cronologia copiato!' : 'Copia link cronologia partita'}
+            </motion.button>
+          )}
         </div>
       </motion.div>
     </div>

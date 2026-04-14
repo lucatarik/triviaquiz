@@ -8,6 +8,7 @@ import CategoryModal from './components/CategoryModal'
 import JollyPicker from './components/JollyPicker'
 import QuestionCard from './components/QuestionCard'
 import ScoreBoard from './components/ScoreBoard'
+import HistoryView from './components/HistoryView'
 import { useGameState } from './hooks/useGameState'
 import { deleteGameState } from './lib/firebase'
 
@@ -16,6 +17,7 @@ function getUrlParams() {
   return {
     player: params.get('player') || '',
     room: params.get('room') || '',
+    history: params.get('history') || '',
   }
 }
 
@@ -34,6 +36,12 @@ function clearUrlParams() {
 }
 
 export default function App() {
+  const { history: historyId } = getUrlParams()
+  if (historyId) return <HistoryView historyId={historyId} />
+  return <GameApp />
+}
+
+function GameApp() {
   const [authState, setAuthState] = useState(() => {
     const { player, room } = getUrlParams()
     return { player, room, ready: !!(player && room) }
